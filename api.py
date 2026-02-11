@@ -1,0 +1,280 @@
+"""FastAPI backend for Twitter Monitor Bot web interface."""
+
+import asyncio
+import os
+from contextlib import asynccontextmanager
+from datetime import datetime
+from typing import List, Optional
+
+from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse, FileResponse
+from pydantic import BaseModel
+import uvicorn
+
+from config import settings
+from database import db
+from scheduler import Scheduler
+from twitter_client import TwitterClient
+from loguru import logger
+
+# Global scheduler instance
+scheduler: Optional[Scheduler] = None
+
+
+class ChannelCreate(BaseModel):
+    name: str
+    webhook_url: str
+
+
+class UserCreate(BaseModel):
+    username: str
+    channel_name: str
+
+
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    channel_name: str
+    last_tweet_id: Optional[str]
+    is_active: bool
+    added_at: str
+
+
+class ChannelResponse(BaseModel):
+    id: int
+    name: str
+    webhook_url: str
+    user_count: int
+    created_at: Optional[str]
+
+
+class StatusResponse(BaseModel):
+    running: bool
+    interval: int
+    users_count: int
+    channels_count: int
+    credits_remaining: int  # This would need to be fetched from API
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifespan."""
+    # Startup
+    logger.info("API starting up...")
+    yield
+    # Shutdown
+    if scheduler and scheduler.running:
+        scheduler.stop()
+        logger.info("Scheduler stopped")
+
+
+app = FastAPI(title="Twitter Monitor Bot API", lifespan=lifespan)
+
+# Serve static files
+if os.path.exists("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    """Serve the main HTML page."""
+    if os.path.exists("static/index.html"):
+        return FileResponse("static/index.html")
+    return HTMLResponse("""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Twitter Monitor Bot</title>
+        <style>
+            body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
+            h1 { color: #1da1f2; }
+        </style>
+    </head>
+    <body>
+        <h1>🐦 Twitter Monitor Bot</h1>
+        <p>Loading...</p>
+    </body>
+    </html>
+    """)
+
+
+# Channel endpoints
+@app.get("/api/channels", response_model=List[ChannelResponse])
+async def get_channels():
+    """Get all channels."""
+    channels = db.list_channels()
+    return [
+        ChannelResponse(
+            id=ch["id"],
+            name=ch["name"],
+            webhook_url=ch["webhook_url"],
+            user_count=ch["user_count"],
+            created_at=ch["created_at"]
+        )
+        for ch in channels
+    ]
+
+
+@app.post("/api/channels")
+async def create_channel(channel: ChannelCreate):
+    """Create a new channel."""
+    try:
+        channel_id = db.create_channel(channel.name, channel.webhook_url)
+        return {"success": True, "id": channel_id, "message": f"Channel '{channel.name}' created"}
+    except Exception as e:
+        if "UNIQUE constraint failed" in str(e):
+            raise HTTPException(status_code=400, detail=f"Channel '{channel.name}' already exists")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/channels/{channel_name}")
+async def delete_channel(channel_name: str):
+    """Delete a channel."""
+    try:
+        deleted = db.delete_channel(channel_name)
+        if deleted:
+            return {"success": True, "message": f"Channel '{channel_name}' deleted"}
+        raise HTTPException(status_code=404, detail=f"Channel '{channel_name}' not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# User endpoints
+@app.get("/api/users", response_model=List[UserResponse])
+async def get_users(channel: Optional[str] = None):
+    """Get all users, optionally filtered by channel."""
+    users = db.list_users(channel)
+    return [
+        UserResponse(
+            id=u["id"],
+            username=u["username"],
+            channel_name=u["channel_name"],
+            last_tweet_id=u["last_tweet_id"],
+            is_active=u["is_active"],
+            added_at=u["added_at"]
+        )
+        for u in users
+    ]
+
+
+@app.post("/api/users")
+async def create_user(user: UserCreate, background_tasks: BackgroundTasks):
+    """Add a new user to monitor."""
+    # Normalize username
+    username = user.username.strip().lower()
+    if username.startswith("@"):
+        username = username[1:]
+    
+    # Get channel
+    channel = db.get_channel_by_name(user.channel_name)
+    if not channel:
+        raise HTTPException(status_code=404, detail=f"Channel '{user.channel_name}' not found")
+    
+    try:
+        # Fetch initial tweet
+        async with TwitterClient() as client:
+            tweets = await client.get_last_tweets(username)
+            last_tweet_id = None
+            if tweets:
+                last_tweet_id = max(tweets, key=lambda t: int(t.id)).id
+        
+        # Add to database
+        user_id = db.add_user(username, channel.id, last_tweet_id)
+        
+        return {
+            "success": True,
+            "id": user_id,
+            "username": username,
+            "last_tweet_id": last_tweet_id,
+            "message": f"User @{username} added to '{user.channel_name}'"
+        }
+    except Exception as e:
+        if "UNIQUE constraint failed" in str(e):
+            raise HTTPException(status_code=400, detail=f"User @{username} already exists")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/users/{username}")
+async def delete_user(username: str):
+    """Remove a user from monitoring."""
+    username = username.strip().lower()
+    if username.startswith("@"):
+        username = username[1:]
+    
+    try:
+        deleted = db.remove_user(username)
+        if deleted:
+            return {"success": True, "message": f"User @{username} removed"}
+        raise HTTPException(status_code=404, detail=f"User @{username} not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Monitor control endpoints
+@app.get("/api/status")
+async def get_status():
+    """Get current monitor status."""
+    users = db.list_users()
+    channels = db.list_channels()
+    
+    return StatusResponse(
+        running=scheduler is not None and scheduler.running,
+        interval=settings.CHECK_INTERVAL_SECONDS,
+        users_count=len(users),
+        channels_count=len(channels),
+        credits_remaining=1020000  # Placeholder - would need to fetch from API
+    )
+
+
+@app.post("/api/monitor/start")
+async def start_monitor(background_tasks: BackgroundTasks):
+    """Start the monitoring loop."""
+    global scheduler
+    
+    if scheduler and scheduler.running:
+        return {"success": False, "message": "Monitor already running"}
+    
+    scheduler = Scheduler(interval=settings.CHECK_INTERVAL_SECONDS)
+    
+    # Run in background
+    async def run_scheduler():
+        await scheduler.run()
+    
+    background_tasks.add_task(run_scheduler)
+    
+    return {"success": True, "message": "Monitor started", "interval": settings.CHECK_INTERVAL_SECONDS}
+
+
+@app.post("/api/monitor/stop")
+async def stop_monitor():
+    """Stop the monitoring loop."""
+    global scheduler
+    
+    if scheduler and scheduler.running:
+        scheduler.stop()
+        return {"success": True, "message": "Monitor stopped"}
+    
+    return {"success": False, "message": "Monitor not running"}
+
+
+@app.post("/api/monitor/run-once")
+async def run_once_check(background_tasks: BackgroundTasks):
+    """Run a single monitoring cycle."""
+    async def run_single():
+        from scheduler import run_once
+        await run_once()
+    
+    background_tasks.add_task(run_single)
+    return {"success": True, "message": "Single check started"}
+
+
+# Test endpoint
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint."""
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+
+
+if __name__ == "__main__":
+    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)

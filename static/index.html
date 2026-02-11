@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🐦 Twitter Monitor Bot</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1><i class="fab fa-twitter"></i> Twitter Monitor Bot</h1>
+            <div class="status-indicator" id="statusIndicator">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText">Loading...</span>
+            </div>
+        </header>
+
+        <!-- Stats Cards -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <i class="fas fa-users"></i>
+                <div class="stat-value" id="usersCount">-</div>
+                <div class="stat-label">Monitored Users</div>
+            </div>
+            <div class="stat-card">
+                <i class="fas fa-broadcast-tower"></i>
+                <div class="stat-value" id="channelsCount">-</div>
+                <div class="stat-label">Channels</div>
+            </div>
+            <div class="stat-card">
+                <i class="fas fa-coins"></i>
+                <div class="stat-value" id="creditsCount">-</div>
+                <div class="stat-label">API Credits</div>
+            </div>
+            <div class="stat-card">
+                <i class="fas fa-clock"></i>
+                <div class="stat-value" id="intervalDisplay">-</div>
+                <div class="stat-label">Check Interval</div>
+            </div>
+        </div>
+
+        <!-- Control Panel -->
+        <div class="control-panel">
+            <h2><i class="fas fa-play-circle"></i> Monitor Control</h2>
+            <div class="controls">
+                <button class="btn btn-success" id="startBtn" onclick="startMonitor()">
+                    <i class="fas fa-play"></i> Start
+                </button>
+                <button class="btn btn-danger" id="stopBtn" onclick="stopMonitor()">
+                    <i class="fas fa-stop"></i> Stop
+                </button>
+                <button class="btn btn-primary" id="runOnceBtn" onclick="runOnce()">
+                    <i class="fas fa-sync"></i> Run Once
+                </button>
+                <button class="btn btn-secondary" onclick="refreshData()">
+                    <i class="fas fa-refresh"></i> Refresh
+                </button>
+            </div>
+        </div>
+
+        <!-- Add User Section -->
+        <div class="section">
+            <h2><i class="fas fa-user-plus"></i> Add User</h2>
+            <div class="form-row">
+                <input type="text" id="newUsername" placeholder="@username" class="input">
+                <select id="channelSelect" class="input">
+                    <option value="">Select Channel...</option>
+                </select>
+                <button class="btn btn-success" onclick="addUser()">
+                    <i class="fas fa-plus"></i> Add
+                </button>
+            </div>
+        </div>
+
+        <!-- Add Channel Section -->
+        <div class="section">
+            <h2><i class="fas fa-plus-circle"></i> Add Channel</h2>
+            <div class="form-row">
+                <input type="text" id="newChannelName" placeholder="Channel name (e.g., crypto)" class="input">
+                <input type="text" id="newWebhookUrl" placeholder="Discord webhook URL" class="input flex-2">
+                <button class="btn btn-success" onclick="addChannel()">
+                    <i class="fas fa-plus"></i> Add
+                </button>
+            </div>
+        </div>
+
+        <!-- Users Table -->
+        <div class="section">
+            <h2><i class="fas fa-list"></i> Monitored Users</h2>
+            <div class="filter-row">
+                <input type="text" id="userFilter" placeholder="Filter users..." class="input" onkeyup="filterUsers()">
+                <select id="channelFilter" class="input" onchange="filterByChannel()">
+                    <option value="">All Channels</option>
+                </select>
+            </div>
+            <div class="table-container">
+                <table class="data-table" id="usersTable">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Channel</th>
+                            <th>Status</th>
+                            <th>Last Tweet ID</th>
+                            <th>Added</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersTableBody">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Channels Table -->
+        <div class="section">
+            <h2><i class="fas fa-broadcast-tower"></i> Channels</h2>
+            <div class="table-container">
+                <table class="data-table" id="channelsTable">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Webhook URL</th>
+                            <th>Users</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="channelsTableBody">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Logs Section -->
+        <div class="section">
+            <h2><i class="fas fa-terminal"></i> Logs</h2>
+            <div class="logs-container" id="logsContainer">
+                <p class="log-entry info">Application started. Ready to monitor.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
