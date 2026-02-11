@@ -24,7 +24,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Create data directory for database persistence
-RUN mkdir -p /app/data
+RUN mkdir -p /app/data /app/logs /app/static
 
 # Create non-root user for security
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
@@ -36,5 +36,8 @@ VOLUME ["/app/data"]
 # Default environment
 ENV DATABASE_PATH=/app/data/monitor.db
 
-# Run the monitor
-CMD ["python", "main.py", "run"]
+# Expose port for web API
+EXPOSE 8000
+
+# Run web API if PORT is set (Render/Railway), otherwise run CLI monitor
+CMD ["sh", "-c", "if [ -n \"\$PORT\" ]; then uvicorn api:app --host 0.0.0.0 --port \$PORT; else python main.py run; fi"]
