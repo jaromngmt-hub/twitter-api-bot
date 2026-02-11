@@ -39,5 +39,6 @@ ENV DATABASE_PATH=/app/data/monitor.db
 # Expose port for web API
 EXPOSE 8000
 
-# Run web API if PORT is set (Render/Railway), otherwise run CLI monitor
-CMD ["sh", "-c", "if [ -n \"\$PORT\" ]; then uvicorn api:app --host 0.0.0.0 --port \$PORT; else python main.py run; fi"]
+# Make start script executable and run it
+RUN chmod +x /app/start.sh
+CMD ["/app/start.sh"]
