@@ -185,7 +185,7 @@ Reply with buttons below ⬇️"""
                     reason="User marked as INTERESTING from Telegram"
                 )
                 
-                if tweet_id:
+                if tweet_id and tweet_id in self.pending_tweets:
                     self.pending_tweets[tweet_id]["status"] = "interesting"
                 
                 return {"success": True, "message": "Sent to Discord #interesting! ✅"}
@@ -194,7 +194,7 @@ Reply with buttons below ⬇️"""
         
         elif action == "NOTHING":
             # Just mark as filtered
-            if tweet_id:
+            if tweet_id and tweet_id in self.pending_tweets:
                 self.pending_tweets[tweet_id]["status"] = "filtered"
             
             return {"success": True, "message": "Skipped. Tweet filtered. 🗑️"}
@@ -216,7 +216,7 @@ Reply with buttons below ⬇️"""
                 )
                 
                 if result["success"]:
-                    if tweet_id:
+                    if tweet_id and tweet_id in self.pending_tweets:
                         self.pending_tweets[tweet_id]["status"] = "built"
                     
                     return {
