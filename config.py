@@ -82,7 +82,7 @@ class Settings:
     # - Kimi K2: Analysis, Planning, Architecture (excellent reasoning)
     # - Qwen Coder: Code generation (40x cheaper, excellent code)
     ANALYSIS_MODEL: str = os.getenv("ANALYSIS_MODEL", "kimi-k2.5")  # Latest version
-    CODE_MODEL: str = os.getenv("CODE_MODEL", "qwen-coder")  # qwen/qwen3-coder-next
+    CODE_MODEL: str = os.getenv("CODE_MODEL", "deepseek-coder")  # deepseek/deepseek-chat - FAST!
     
     # TwitterAPI
     TWITTERAPI_BASE_URL: str = "https://api.twitterapi.io"

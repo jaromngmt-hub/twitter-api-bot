@@ -122,14 +122,14 @@ class AIRouter:
             } if self.api_key else {}
         )
         
-        # OPTIMIZED: Kimi K2.5 for thinking, Qwen3 Coder Next for coding!
+        # OPTIMIZED: Kimi K2.5 for thinking, DeepSeek Coder for coding (FAST!)
         self.defaults = {
             "requirements": "kimi-k2.5",      # 🧠 Kimi K2.5: Latest enhanced reasoning
             "architecture": "kimi-k2.5",      # 🧠 Kimi K2.5: Best for complex architecture
             "design": "kimi-k2.5",            # 🧠 Kimi K2.5: Great for design systems
-            "code": "qwen-coder",             # 💻 Qwen3 Coder Next: qwen/qwen3-coder-next
+            "code": "deepseek-coder",         # 💻 DeepSeek: FAST + CHEAP + GOOD!
             "review": "kimi-k2.5",            # 🧠 Kimi K2.5: Critical analysis
-            "docs": "qwen-coder",             # 💻 Qwen3 Coder Next: Good for docs
+            "docs": "deepseek-coder",         # 💻 DeepSeek: Fast for docs
         }
     
     async def generate(
@@ -154,8 +154,8 @@ class AIRouter:
             raise ValueError("OPENROUTER_API_KEY not set")
         
         # Select model
-        model_key = model or self.defaults.get(task_type, "qwen-coder")
-        model_config = CODING_MODELS.get(model_key, CODING_MODELS["qwen-coder"])
+        model_key = model or self.defaults.get(task_type, "deepseek-coder")
+        model_config = CODING_MODELS.get(model_key, CODING_MODELS["deepseek-coder"])
         
         logger.info(f"Using {model_config.name} for {task_type} (${model_config.input_price}/M tokens)")
         
