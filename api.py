@@ -463,8 +463,25 @@ async def telegram_webhook(request: dict):
             action = parts[0]
             alert_id = parts[1] if len(parts) > 1 else ""
             
+            # Handle BUILD_DEFAULT (instant build as-is)
+            if action == "BUILD_DEFAULT":
+                # Trigger build immediately with DEFAULT
+                result = await telegram_bot.process_reply(
+                    action="BUILD", 
+                    alert_id=alert_id, 
+                    user_text="DEFAULT",
+                    chat_id=chat_id
+                )
+            # Handle BUILD_CUSTOM (user will type instructions)
+            elif action == "BUILD_CUSTOM":
+                # Send message asking for custom input
+                await telegram_bot.send_message(
+                    chat_id,
+                    f"✏️ [{alert_id}] Write your custom instructions:\n\nExamples:\n• Use Qwen Coder instead of Claude\n• Focus on La Liga, not Premier League\n• Add SMS alerts\n• Skip the UI, just API\n\nType your requirements and send:"
+                )
+                result = {"success": True, "message": "Waiting for your custom instructions"}
             # Process action (pass chat_id for BUILD to request requirements)
-            if action == "BUILD":
+            elif action == "BUILD":
                 result = await telegram_bot.process_reply(action, alert_id, chat_id=chat_id)
             else:
                 result = await telegram_bot.process_reply(action, alert_id)

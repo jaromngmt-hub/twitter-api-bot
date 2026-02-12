@@ -217,29 +217,27 @@ Choose action ⬇️"""
         except Exception as e:
             logger.error(f"Failed to store pending build: {e}")
         
-        # Send requirements request
+        # Send requirements request with DEFAULT button
         message = f"""🔨 BUILD: [{alert_id}]
 
 Original idea:
 💬 {pending.get('text', '')[:200]}...
 
-📝 ADD YOUR INPUT:
-Reply with any tips, requirements, or info for Kimi to consider.
+Choose option below or type custom instructions:"""
 
-Examples of what you can write:
-- "Use Qwen Coder instead of Claude to save money"
-- "Focus on La Liga, not Premier League"
-- "I want SMS alerts when bets win"
-- "Skip the fancy UI, keep it simple"
-- "Make it a Telegram bot, not web app"
-
-Or reply "DEFAULT" to build as-is."""
-
-        await self.send_message(chat_id, message)
+        # Keyboard with DEFAULT button + custom input option
+        keyboard = {
+            "inline_keyboard": [
+                [{"text": "✅ DEFAULT (Build as-is)", "callback_data": f"BUILD_DEFAULT:{alert_id}"}],
+                [{"text": "✏️ Write custom instructions", "callback_data": f"BUILD_CUSTOM:{alert_id}"}]
+            ]
+        }
+        
+        await self.send_message(chat_id, message, reply_markup=keyboard)
         
         return {
             "success": True, 
-            "message": f"Awaiting your requirements for [{alert_id}]. Reply with customizations or 'DEFAULT'"
+            "message": f"Choose DEFAULT or write custom instructions for [{alert_id}]"
         }
     
     async def process_reply(self, action: str, alert_id: str, user_text: str = None, chat_id: int = None) -> Dict:
