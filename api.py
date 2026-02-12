@@ -66,13 +66,13 @@ async def lifespan(app: FastAPI):
     
     # Auto-start scheduler on boot (Render free tier fix)
     try:
-        from scheduler import Scheduler
-        if not scheduler:
+        if not scheduler or not scheduler.running:
             scheduler = Scheduler(interval=settings.CHECK_INTERVAL_SECONDS)
-            # Run scheduler in background
-            import asyncio
-            asyncio.create_task(scheduler.run())
+            # Start scheduler in background task
+            task = asyncio.create_task(scheduler.run())
             logger.info(f"🚀 Scheduler auto-started (interval: {settings.CHECK_INTERVAL_SECONDS}s)")
+            # Store task reference to prevent garbage collection
+            app.state.scheduler_task = task
     except Exception as e:
         logger.error(f"Failed to auto-start scheduler: {e}")
     
