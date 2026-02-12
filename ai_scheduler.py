@@ -11,6 +11,7 @@ from ai_analyzer import AIAnalyzer, TweetRating
 from config import settings
 from database import db
 from models import Tweet, UserWithChannel
+from rate_limiter import rate_limiter
 from tiered_discord_client import TieredDiscordClient
 from twitter_client import (
     TwitterAuthError,
@@ -191,35 +192,63 @@ class AIScheduler:
                     f"Sent tier {result['tier']} tweet {tweet.id} from @{user.username}"
                 )
                 
-                # 🚨 URGENT NOTIFICATION for score 9-10
+                # 🚨 URGENT NOTIFICATION for score 9-10 (with rate limiting)
                 if urgent_notifier and rating and rating.score >= 9:
                     try:
-                        notify_result = await urgent_notifier.send_urgent_notification(
-                            user.username,
-                            tweet,
-                            {
-                                "score": rating.score,
-                                "category": rating.category,
-                                "summary": rating.summary,
-                                "reason": rating.reason
-                            }
+                        # Check rate limit
+                        should_send = await rate_limiter.should_send_notification(
+                            user.username, tweet.id
                         )
-                        if notify_result["sent"]:
-                            logger.info(f"🚨 URGENT notification sent for @{user.username} (score: {rating.score})")
-                            # Store pending tweet for user reply
-                            whatsapp_handler.store_pending_tweet(
-                                phone=settings.YOUR_PHONE_NUMBER,
-                                username=user.username,
-                                tweet=tweet,
-                                rating={
+                        
+                        if should_send:
+                            # Send notification immediately
+                            notify_result = await urgent_notifier.send_urgent_notification(
+                                user.username,
+                                tweet,
+                                {
                                     "score": rating.score,
                                     "category": rating.category,
                                     "summary": rating.summary,
                                     "reason": rating.reason
                                 }
                             )
+                            
+                            if notify_result["sent"]:
+                                logger.info(f"🚨 URGENT notification sent for @{user.username} (score: {rating.score})")
+                                await rate_limiter.mark_notification_sent()
+                                
+                                # Store pending tweet for user reply
+                                whatsapp_handler.store_pending_tweet(
+                                    phone=settings.YOUR_PHONE_NUMBER,
+                                    username=user.username,
+                                    tweet=tweet,
+                                    rating={
+                                        "score": rating.score,
+                                        "category": rating.category,
+                                        "summary": rating.summary,
+                                        "reason": rating.reason
+                                    }
+                                )
+                            else:
+                                logger.warning(f"Failed to send urgent notification: {notify_result}")
                         else:
-                            logger.warning(f"Failed to send urgent notification: {notify_result}")
+                            # Queue for later batch notification
+                            position = await rate_limiter.queue_tweet(
+                                username=user.username,
+                                tweet_id=tweet.id,
+                                text=tweet.text,
+                                score=rating.score,
+                                category=rating.category,
+                                summary=rating.summary,
+                                reason=rating.reason
+                            )
+                            
+                            if position > 0:
+                                logger.info(
+                                    f"⏳ Queued urgent tweet from @{user.username} "
+                                    f"(position {position}, will batch notify later)"
+                                )
+                            
                     except Exception as e:
                         logger.error(f"Urgent notification error: {e}")
                 
@@ -308,6 +337,54 @@ class AIScheduler:
         
         logger.info("AI monitoring cycle completed")
     
+    async def _send_batch_notifications(self):
+        """Background task to send queued notifications after cooldown."""
+        while self.running:
+            await asyncio.sleep(60)  # Check every minute
+            
+            if not self.running:
+                break
+            
+            status = rate_limiter.get_status()
+            
+            # If cooldown expired and we have queued tweets
+            if not status["in_cooldown"] and status["queue_size"] > 0:
+                summary = await rate_limiter.get_queued_summary()
+                if not summary:
+                    continue
+                
+                logger.info(f"Sending batch notification for {summary['total']} queued tweets")
+                
+                try:
+                    async with UrgentNotifier() as notifier:
+                        if notifier.is_configured():
+                            # Build batch message
+                            message = f"""📦 *BATCH ALERT: {summary['total']} URGENT TWEETS*
+
+While you were away, {summary['total']} high-value tweets were detected:
+
+"""
+                            for i, tweet in enumerate(summary['top_tweets'][:3], 1):
+                                message += f"{i}. *@{tweet['username']}* ({tweet['score']}/10)\n"
+                                message += f"   {tweet['summary'][:80]}...\n\n"
+                            
+                            if summary['total'] > 3:
+                                message += f"_...and {summary['total'] - 3} more_\n\n"
+                            
+                            message += f"Average score: {summary['avg_score']}/10\n"
+                            message += "Check Discord for full details!"
+                            
+                            await notifier._send_whatsapp_raw(
+                                to=settings.YOUR_PHONE_NUMBER,
+                                message=message
+                            )
+                            
+                            await rate_limiter.mark_notification_sent()
+                            logger.info("Batch notification sent")
+                            
+                except Exception as e:
+                    logger.error(f"Failed to send batch notification: {e}")
+    
     async def run(self) -> None:
         """Run continuous AI-powered monitoring loop."""
         self.running = True
@@ -324,6 +401,10 @@ class AIScheduler:
             logger.info(f"Urgent Notifications: {'ENABLED' if settings.URGENT_NOTIFICATIONS_ENABLED else 'DISABLED'}")
             if settings.URGENT_NOTIFICATIONS_ENABLED:
                 logger.info(f"  → Min score for phone alert: {settings.URGENT_MIN_SCORE}")
+                logger.info(f"  → Rate limit: 1 per {rate_limiter.COOLDOWN_MINUTES}min + batching")
+        
+        # Start background batch notification task
+        batch_task = asyncio.create_task(self._send_batch_notifications())
         
         try:
             while self.running:
@@ -353,6 +434,7 @@ class AIScheduler:
         
         finally:
             self.running = False
+            batch_task.cancel()
             logger.info("AI scheduler stopped")
     
     def _signal_handler(self) -> None:

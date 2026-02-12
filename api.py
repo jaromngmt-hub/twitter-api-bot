@@ -408,5 +408,12 @@ async def get_pending_tweets():
     }
 
 
+@app.get("/api/rate-limit")
+async def get_rate_limit_status():
+    """Get notification rate limiter status."""
+    from rate_limiter import rate_limiter
+    return rate_limiter.get_status()
+
+
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
