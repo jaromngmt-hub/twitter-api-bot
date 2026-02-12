@@ -47,7 +47,7 @@ class RequirementsEngineeringSkill:
     
     @staticmethod
     def extract_requirements_prompt(tweet: str, username: str) -> str:
-        return f"""Using Shape Up methodology, analyze this tweet:
+        return f"""Using Shape Up methodology, analyze this tweet and determine if it's buildable as a software project.
 
 Tweet from @{username}:
 "{tweet}"
@@ -55,16 +55,35 @@ Tweet from @{username}:
 Apply these principles:
 {RequirementsEngineeringSkill.SHAPE_UP_PRINCIPLES}
 
-Extract:
-1. PROBLEM STATEMENT (1 sentence)
-2. APPETITE (estimated time: 2weeks/1month/unknown)
-3. TARGET USERS (who benefits?)
-4. CORE FEATURES (3-5 must-haves)
-5. BOUNDARIES (what's NOT included?)
-6. CONSTRAINTS (technical limitations)
-7. SUCCESS CRITERIA (how do we know it works?)
+Determine:
+- is_buildable: true if this describes a software project that can be built (web app, mobile app, CLI tool, API, etc.)
+- is_buildable: false if it's just news, commentary, opinion, or not a buildable idea
 
-Response format: JSON with these fields."""
+If buildable, extract:
+1. project_name (short, catchy name)
+2. description (1-2 sentences)
+3. PROBLEM STATEMENT (1 sentence)
+4. APPETITE (estimated time: 2weeks/1month/unknown)
+5. TARGET USERS (who benefits?)
+6. CORE FEATURES (3-5 must-haves)
+7. BOUNDARIES (what's NOT included?)
+8. CONSTRAINTS (technical limitations)
+9. SUCCESS CRITERIA (how do we know it works?)
+
+Response format - JSON:
+{{
+  "is_buildable": true/false,
+  "reason": "why or why not",
+  "project_name": "...",
+  "description": "...",
+  "problem_statement": "...",
+  "appetite": "...",
+  "target_users": ["..."],
+  "core_features": ["..."],
+  "boundaries": ["..."],
+  "constraints": ["..."],
+  "success_criteria": ["..."]
+}}"""
 
 
 class SystemArchitectureSkill:
