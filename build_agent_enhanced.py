@@ -47,6 +47,7 @@ from build_skills import (
     TailwindCSSSkill,
     StorybookSkill,
 )
+from component_parser import Component, safe_parse_components
 
 
 class BuildStage(Enum):
@@ -86,15 +87,7 @@ class TechStack:
     reasoning: str
 
 
-@dataclass
-class Component:
-    """System component definition."""
-    name: str
-    type: str  # api, database, frontend, worker, etc.
-    description: str
-    responsibilities: List[str]
-    dependencies: List[str]
-    files: List[str]
+# Component class imported from component_parser for robust parsing
 
 
 @dataclass
@@ -483,22 +476,8 @@ Respond in JSON:
         data = json.loads(content)
         
         tech_stack = TechStack(**data["tech_stack"])
-        # Handle components safely - AI sometimes returns strings instead of objects
-        components = []
-        for c in data.get("components", []):
-            if isinstance(c, dict):
-                components.append(Component(**c))
-            elif isinstance(c, str):
-                # Convert string to component
-                components.append(Component(
-                    name=c,
-                    type="module",
-                    description=f"Component: {c}",
-                    responsibilities=[],
-                    dependencies=[],
-                    files=[]
-                ))
-        
+        # Use robust component parser to handle AI output variations
+        components = safe_parse_components(data.get("components", []))
         logger.info(f"✅ Architecture planned: {project_type} with {tech_stack.language}/{tech_stack.framework}")
         
         return ProjectPlan(
@@ -572,21 +551,8 @@ Respond in JSON with tech_stack, components, api_endpoints, etc."""
         
         # Add Vercel AI SDK to tech stack
         tech_stack = TechStack(**data["tech_stack"])
-        # Handle components safely
-        components = []
-        for c in data.get("components", []):
-            if isinstance(c, dict):
-                components.append(Component(**c))
-            elif isinstance(c, str):
-                components.append(Component(
-                    name=c,
-                    type="module", 
-                    description=f"Component: {c}",
-                    responsibilities=[],
-                    dependencies=[],
-                    files=[]
-                ))
-        
+        # Use robust component parser
+        components = safe_parse_components(data.get("components", []))
         logger.info(f"✅ AI Architecture planned: {project_type} with Vercel AI SDK ({len(components)} components)")
         
         return ProjectPlan(
