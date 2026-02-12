@@ -24,6 +24,9 @@ class TelegramBot:
         # Store pending tweets awaiting user action
         self.pending_tweets: Dict[str, Dict] = {}
         
+        # Store builds awaiting requirements
+        self.awaiting_requirements: Dict[str, Dict] = {}
+        
         # Counters for each category (AI-001, CRYPTO-005, etc.)
         self.category_counters: Dict[str, int] = {}
         self.global_counter = 0
@@ -125,19 +128,23 @@ Choose action ⬇️"""
             logger.error(f"Telegram send error: {e}")
             return {"sent": False, "error": str(e)}
     
-    async def send_message(self, chat_id: str, text: str) -> Dict:
+    async def send_message(self, chat_id: str, text: str, reply_markup: dict = None) -> Dict:
         """Send a simple text message."""
         if not self.base_url:
             return {"sent": False, "error": "Not configured"}
         
         try:
+            payload = {
+                "chat_id": chat_id,
+                "text": text
+            }
+            if reply_markup:
+                payload["reply_markup"] = reply_markup
+                
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     f"{self.base_url}/sendMessage",
-                    json={
-                        "chat_id": chat_id,
-                        "text": text
-                    }
+                    json=payload
                 )
                 return {"sent": response.status_code == 200}
         except Exception as e:
@@ -173,7 +180,7 @@ Choose action ⬇️"""
             return
         
         # Action emojis
-        emoji = {"INTERESTING": "📌", "NOTHING": "🗑️", "BUILD": "🔨"}.get(action, "✅")
+        emoji = {"INTERESTING": "📌", "NOTHING": "🗑️", "BUILD": "🔨", "AWAITING_INPUT": "⏳"}.get(action, "✅")
         
         text = f"{emoji} [{alert_id}] {action}\n\n{result.get('message', 'Done!')}"
         
@@ -190,8 +197,79 @@ Choose action ⬇️"""
         except Exception as e:
             logger.error(f"Failed to update message: {e}")
     
-    async def process_reply(self, action: str, alert_id: str) -> Dict:
+    async def request_build_requirements(self, alert_id: str, chat_id: int) -> Dict:
+        """Ask user for additional requirements before building."""
+        
+        pending = self.pending_tweets.get(alert_id, {})
+        
+        # Store that we're awaiting requirements
+        self.awaiting_requirements[alert_id] = {
+            **pending,
+            "chat_id": chat_id,
+            "requested_at": datetime.now()
+        }
+        
+        # Send requirements request
+        message = f"""🔨 BUILD: [{alert_id}]
+
+You clicked BUILD on:
+💬 {pending.get('text', '')[:150]}...
+
+📝 CUSTOMIZE YOUR BUILD:
+Reply with any requirements, e.g.:
+
+• "Use cheaper AI models (GPT-4o-mini instead of Claude)"
+• "Add support for La Liga, Bundesliga, not just Premier League"
+• "Include SMS notifications, not just Telegram"
+• "Make it a Chrome extension instead of web app"
+• "Skip the UI, just API endpoints"
+
+Or reply "DEFAULT" to build as-is."""
+
+        await self.send_message(chat_id, message)
+        
+        return {
+            "success": True, 
+            "message": f"Awaiting your requirements for [{alert_id}]. Reply with customizations or 'DEFAULT'"
+        }
+    
+    async def process_reply(self, action: str, alert_id: str, user_text: str = None, chat_id: int = None) -> Dict:
         """Process user reply action."""
+        
+        # Check if this is a requirements reply for a build
+        if alert_id in self.awaiting_requirements and user_text:
+            # This is requirements input - trigger the actual build
+            build_data = self.awaiting_requirements.pop(alert_id)
+            
+            requirements = user_text if user_text.upper() != "DEFAULT" else "None - build as described in tweet"
+            
+            # Trigger build with requirements
+            try:
+                from build_agent_enhanced import enhanced_build_agent
+                
+                # Enhance the tweet text with user requirements
+                enhanced_tweet = f"""{build_data.get('text', '')}
+
+ADDITIONAL REQUIREMENTS FROM USER:
+{requirements}"""
+                
+                result = await enhanced_build_agent.build_project(
+                    tweet=enhanced_tweet,
+                    username=build_data.get("username", "unknown")
+                )
+                
+                if result["success"]:
+                    if alert_id in self.pending_tweets:
+                        self.pending_tweets[alert_id]["status"] = "built"
+                    
+                    return {
+                        "success": True,
+                        "message": f"🔨 [{alert_id}] BUILD COMPLETE!\n\nProject: {result['project_name']}\nStack: {', '.join(result.get('tech_stack', [])[:3])}\n\nWith customizations:\n{requirements[:100]}..."
+                    }
+                else:
+                    return {"success": False, "message": f"[{alert_id}] Build failed: {result.get('error', 'Unknown')}"}
+            except Exception as e:
+                return {"success": False, "message": f"[{alert_id}] Build error: {e}"}
         
         # Get pending tweet data
         pending = self.pending_tweets.get(alert_id, {})
@@ -222,7 +300,11 @@ Choose action ⬇️"""
             return {"success": True, "message": f"Skipped [{alert_id}]. Tweet filtered."}
         
         elif action == "BUILD":
-            # Trigger build process
+            # If we have chat_id, request requirements first
+            if chat_id:
+                return await self.request_build_requirements(alert_id, chat_id)
+            
+            # Otherwise try to build without requirements (legacy)
             tweet_text = pending.get("text", "")
             
             if not tweet_text:
@@ -269,6 +351,10 @@ Choose action ⬇️"""
             for alert_id, data in self.pending_tweets.items()
             if data.get("status") == "pending"
         ]
+    
+    def is_awaiting_requirements(self, alert_id: str) -> bool:
+        """Check if we're waiting for requirements for this alert."""
+        return alert_id in self.awaiting_requirements
     
     async def set_webhook(self, webhook_url: str) -> Dict:
         """Set webhook URL for receiving updates."""

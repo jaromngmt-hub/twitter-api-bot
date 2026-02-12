@@ -449,8 +449,11 @@ async def telegram_webhook(request: dict):
             action = parts[0]
             alert_id = parts[1] if len(parts) > 1 else ""
             
-            # Process action
-            result = await telegram_bot.process_reply(action, alert_id)
+            # Process action (pass chat_id for BUILD to request requirements)
+            if action == "BUILD":
+                result = await telegram_bot.process_reply(action, alert_id, chat_id=chat_id)
+            else:
+                result = await telegram_bot.process_reply(action, alert_id)
             
             # Answer callback
             await telegram_bot.answer_callback(callback["id"], result.get("message", "Done!"))
@@ -464,20 +467,39 @@ async def telegram_webhook(request: dict):
         if "message" in request:
             message = request["message"]
             chat_id = message["chat"]["id"]
-            text = message.get("text", "").strip().upper()
+            text = message.get("text", "").strip()
+            text_upper = text.upper()
             
             logger.info(f"Telegram message from {chat_id}: {text}")
             
-            # Map replies to actions
+            # Check if we're awaiting requirements for any build
+            awaiting = None
+            for alert_id, data in telegram_bot.awaiting_requirements.items():
+                if data.get("chat_id") == chat_id:
+                    awaiting = alert_id
+                    break
+            
+            if awaiting:
+                # This is a requirements reply - process it
+                result = await telegram_bot.process_reply(
+                    action="BUILD", 
+                    alert_id=awaiting, 
+                    user_text=text,
+                    chat_id=chat_id
+                )
+                await telegram_bot.send_message(chat_id, result.get("message", "Build started!"))
+                return {"ok": True}
+            
+            # Map replies to actions (for quick replies without requirements)
             action_map = {
                 "1": "INTERESTING", "I": "INTERESTING", "INTERESTING": "INTERESTING",
                 "2": "NOTHING", "N": "NOTHING", "NOTHING": "NOTHING",
                 "3": "BUILD", "B": "BUILD", "BUILD": "BUILD",
             }
             
-            action = action_map.get(text)
+            action = action_map.get(text_upper)
             if action:
-                result = await telegram_bot.process_reply(action)
+                result = await telegram_bot.process_reply(action, chat_id=chat_id)
                 await telegram_bot.send_message(chat_id, result.get("message", f"Action: {action}"))
             else:
                 await telegram_bot.send_message(
