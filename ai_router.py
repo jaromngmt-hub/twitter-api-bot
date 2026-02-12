@@ -33,6 +33,14 @@ class ModelConfig:
 # Model registry - optimized for specific tasks
 CODING_MODELS = {
     # 🧠 REASONING MODELS (Analysis, Planning, Architecture)
+    "kimi-k2.5": ModelConfig(
+        id="moonshotai/kimi-k2.5",
+        name="Kimi K2.5",
+        strength="LATEST Kimi - Enhanced reasoning and analysis",
+        input_price=0.50,
+        output_price=2.00,
+        context=256000
+    ),
     "kimi-k2": ModelConfig(
         id="moonshotai/kimi-k2",
         name="Kimi K2",
@@ -51,6 +59,14 @@ CODING_MODELS = {
     ),
     
     # 💻 CODING MODELS (Implementation, Tests)
+    "qwen-coder-32b": ModelConfig(
+        id="qwen/qwen-2.5-coder-32b-instruct",
+        name="Qwen Coder 32B",
+        strength="LATEST 32B model - Best code generation, 40x cheaper than Claude",
+        input_price=0.10,
+        output_price=0.40,
+        context=131072
+    ),
     "qwen-coder": ModelConfig(
         id="qwen/qwen3-coder-next",
         name="Qwen3 Coder Next",
@@ -106,14 +122,14 @@ class AIRouter:
             } if self.api_key else {}
         )
         
-        # OPTIMIZED: Kimi for thinking, Qwen for coding!
+        # OPTIMIZED: Kimi K2.5 for thinking, Qwen 32B for coding!
         self.defaults = {
-            "requirements": "kimi-k2",        # 🧠 Kimi: Excellent reasoning for analysis
-            "architecture": "kimi-k2",        # 🧠 Kimi: Best for complex architecture decisions
-            "design": "kimi-k2",              # 🧠 Kimi: Great for design systems
-            "code": "qwen-coder",             # 💻 Qwen: BEST code generation, 40x cheaper!
-            "review": "kimi-k2",              # 🧠 Kimi: Critical analysis
-            "docs": "qwen-coder",             # 💻 Qwen: Good enough for docs, super cheap
+            "requirements": "kimi-k2.5",      # 🧠 Kimi K2.5: Latest enhanced reasoning
+            "architecture": "kimi-k2.5",      # 🧠 Kimi K2.5: Best for complex architecture
+            "design": "kimi-k2.5",            # 🧠 Kimi K2.5: Great for design systems
+            "code": "qwen-coder-32b",         # 💻 Qwen 32B: LATEST BEST code generation!
+            "review": "kimi-k2.5",            # 🧠 Kimi K2.5: Critical analysis
+            "docs": "qwen-coder-32b",         # 💻 Qwen 32B: Good for docs, super cheap
         }
     
     async def generate(
@@ -138,8 +154,8 @@ class AIRouter:
             raise ValueError("OPENROUTER_API_KEY not set")
         
         # Select model
-        model_key = model or self.defaults.get(task_type, "qwen-coder")
-        model_config = CODING_MODELS.get(model_key, CODING_MODELS["qwen-coder"])
+        model_key = model or self.defaults.get(task_type, "qwen-coder-32b")
+        model_config = CODING_MODELS.get(model_key, CODING_MODELS["qwen-coder-32b"])
         
         logger.info(f"Using {model_config.name} for {task_type} (${model_config.input_price}/M tokens)")
         

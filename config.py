@@ -81,8 +81,8 @@ class Settings:
     # 🤖 SMART MODEL ROUTING (Kimi thinks, Qwen codes!):
     # - Kimi K2: Analysis, Planning, Architecture (excellent reasoning)
     # - Qwen Coder: Code generation (40x cheaper, excellent code)
-    ANALYSIS_MODEL: str = os.getenv("ANALYSIS_MODEL", "kimi-k2")
-    CODE_MODEL: str = os.getenv("CODE_MODEL", "qwen-coder")
+    ANALYSIS_MODEL: str = os.getenv("ANALYSIS_MODEL", "kimi-k2.5")  # Latest version
+    CODE_MODEL: str = os.getenv("CODE_MODEL", "qwen-coder-32b")  # Latest 32B version
     
     # TwitterAPI
     TWITTERAPI_BASE_URL: str = "https://api.twitterapi.io"
