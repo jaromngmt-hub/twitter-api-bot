@@ -159,7 +159,7 @@ Open: https://twitter.com/{username}
     
     async def _send_whatsapp(self, username: str, tweet: Tweet, rating: dict) -> dict:
         """Send WhatsApp message via Twilio."""
-        if not all([self.twilio_sid, self.twilio_token, self.twilio_from, self.your_phone]):
+        if not all([self.twilio_sid, self.twilio_token, self.your_phone]):
             return {"sent": False, "error": "Twilio not configured"}
         
         score = rating.get("score", 0)
@@ -186,10 +186,9 @@ Open: https://twitter.com/{username}
 Twitter Monitor Bot 🤖
 """
         
-        # WhatsApp from number must be in format 'whatsapp:+1234567890'
-        from_number = self.twilio_from
-        if not from_number.startswith("whatsapp:"):
-            from_number = f"whatsapp:{from_number}"
+        # Use Twilio WhatsApp sandbox number (NOT your regular Twilio number)
+        # This is the number you sent "join" message to
+        from_number = "whatsapp:+14155238886"
         
         to_number = self.your_phone
         if not to_number.startswith("whatsapp:"):
