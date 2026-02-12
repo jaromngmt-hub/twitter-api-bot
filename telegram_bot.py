@@ -257,6 +257,12 @@ Or reply "DEFAULT" to build as-is."""
             
             requirements = user_text if user_text.upper() != "DEFAULT" else "None - build as described in tweet"
             
+            # Send "Build started" message immediately
+            await self.send_message(
+                chat_id, 
+                f"🔨 [{alert_id}] BUILD STARTED!\n\n⏳ This takes 3-5 minutes...\n\nSteps:\n1️⃣ Kimi K2 analyzing...\n2️⃣ Kimi K2 planning architecture...\n3️⃣ Qwen Coder generating code...\n4️⃣ Creating GitHub repo...\n5️⃣ Pushing code...\n\nI'll update you when done! 🚀"
+            )
+            
             # Trigger build with requirements
             try:
                 from build_agent_enhanced import enhanced_build_agent
@@ -278,15 +284,40 @@ User requirements: {requirements}"""
                     if alert_id in self.pending_tweets:
                         self.pending_tweets[alert_id]["status"] = "built"
                     
+                    # Send success message with repo link
+                    repo_url = result.get('repo_url', 'N/A')
+                    project_name = result.get('project_name', 'Unknown')
+                    tech_stack = ', '.join(result.get('tech_stack', [])[:3])
+                    
+                    success_msg = f"""✅ [{alert_id}] BUILD COMPLETE!
+
+📁 Project: {project_name}
+🔧 Stack: {tech_stack}
+🔗 Repo: {repo_url}
+
+Your customizations:
+{requirements[:80]}...
+
+⏱️ Time: ~{result.get('stats', {}).get('total_time', 'N/A')}s
+💰 Cost: ~${result.get('stats', {}).get('cost', 'N/A')}
+
+Next steps in repo README! 🎉"""
+                    
+                    await self.send_message(chat_id, success_msg)
+                    
                     return {
                         "success": True,
-                        "message": f"🔨 [{alert_id}] BUILD COMPLETE!\n\nProject: {result['project_name']}\nStack: {', '.join(result.get('tech_stack', [])[:3])}\n\nWith customizations:\n{requirements[:100]}..."
+                        "message": "Build complete - check message above!"
                     }
                 else:
-                    return {"success": False, "message": f"[{alert_id}] Build failed: {result.get('error', 'Unknown')}"}
+                    error_msg = f"❌ [{alert_id}] BUILD FAILED\n\nError: {result.get('error', 'Unknown error')}\n\nTry again or use different requirements."
+                    await self.send_message(chat_id, error_msg)
+                    return {"success": False, "message": error_msg}
             except Exception as e:
                 db.mark_build_completed(alert_id, success=False)
-                return {"success": False, "message": f"[{alert_id}] Build error: {e}"}
+                error_msg = f"❌ [{alert_id}] BUILD ERROR\n\n{e}\n\nPlease try again."
+                await self.send_message(chat_id, error_msg)
+                return {"success": False, "message": error_msg}
         
         # Get pending tweet data
         pending = self.pending_tweets.get(alert_id, {})
