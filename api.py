@@ -484,45 +484,31 @@ async def get_available_models():
     }
 
 
-@app.post("/api/test/whatsapp-simple")
-async def test_whatsapp_simple():
-    """Simple WhatsApp test - just sends a basic message."""
-    from config import settings
-    import httpx
-    
-    if not settings.TWILIO_ACCOUNT_SID:
-        return {"error": "Twilio not configured"}
-    
-    message = """🧪 *TEST MESSAGE*
-
-If you see this, WhatsApp is working!
-
-Reply with:
-• BUILD - to test the build pipeline
-• INTERESTING - to send to Discord
-• NOTHING - to skip
-
-This tests the Kimi+Qwen integration."""
+@app.post("/api/test/complete")
+async def test_complete():
+    """
+    Complete system test - verifies all components.
+    Sends WhatsApp confirmation if everything works.
+    """
+    import subprocess
+    import sys
     
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"https://api.twilio.com/2010-04-01/Accounts/{settings.TWILIO_ACCOUNT_SID}/Messages.json",
-                auth=(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN),
-                data={
-                    "From": "whatsapp:+14155238886",
-                    "To": f"whatsapp:{settings.YOUR_PHONE_NUMBER}",
-                    "Body": message
-                }
-            )
-            
-            if response.status_code == 201:
-                return {"success": True, "message": "WhatsApp sent! Check your phone."}
-            else:
-                return {"success": False, "error": f"Twilio error: {response.text}"}
-                
+        # Run the test script
+        result = subprocess.run(
+            [sys.executable, "test_complete.py"],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        return {
+            "success": result.returncode == 0,
+            "output": result.stdout,
+            "errors": result.stderr if result.stderr else None
+        }
+        
     except Exception as e:
-        logger.error(f"WhatsApp test failed: {e}")
         return {"success": False, "error": str(e)}
 
 
