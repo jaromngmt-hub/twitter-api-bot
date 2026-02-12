@@ -484,5 +484,103 @@ async def get_available_models():
     }
 
 
+@app.post("/api/test/build-calendar")
+async def test_build_calendar():
+    """
+    TEST: Trigger BUILD with a calendar app tweet.
+    Sends WhatsApp message and runs full Kimi+Qwen pipeline.
+    """
+    from build_agent_enhanced import enhanced_build_agent
+    from urgent_notifier import UrgentNotifier
+    from config import settings
+    
+    # Test tweet about building a calendar
+    test_tweet = "Build a smart calendar app that automatically schedules my tasks based on priority and energy levels throughout the day. It should sync with Google Calendar and send notifications when I'm about to miss a deadline. Dark mode by default."
+    
+    # First send WhatsApp "urgent tweet" style message
+    notifier = UrgentNotifier()
+    
+    welcome_msg = """🧪 *TEST BUILD - Calendar App*
+
+Simulating urgent tweet from @productivity_guru:
+
+"Build a smart calendar app that automatically schedules my tasks based on priority and energy levels throughout the day. It should sync with Google Calendar and send notifications when I'm about to miss a deadline. Dark mode by default."
+
+━━━━━━━━━━━━━━━━━━━━━━
+*Reply with:*
+3️⃣ *BUILD* - Create this project
+━━━━━━━━━━━━━━━━━━━━━━
+
+(This is a test - I'll auto-reply BUILD in 5 seconds...)"""
+    
+    try:
+        await notifier._send_whatsapp_raw(
+            to=settings.YOUR_PHONE_NUMBER,
+            message=welcome_msg
+        )
+        
+        # Wait a moment then auto-trigger BUILD
+        import asyncio
+        await asyncio.sleep(5)
+        
+        # Send "BUILDING..." message
+        await notifier._send_whatsapp_raw(
+            to=settings.YOUR_PHONE_NUMBER,
+            message="🔨 *BUILD STARTED*\n\n🧠 Kimi K2: Analyzing calendar app requirements...\n💻 Qwen Coder: Ready to build\n\nThis takes ~2-3 minutes!"
+        )
+        
+        # Run full build pipeline
+        logger.info("🧪 TEST BUILD: Starting calendar app build with Kimi+Qwen")
+        result = await enhanced_build_agent.build_project(test_tweet, "productivity_guru")
+        
+        if result["success"]:
+            project_name = result["project_name"]
+            github_url = f"https://github.com/{settings.GITHUB_USERNAME}/{project_name}"
+            
+            success_msg = f"""✅ *TEST BUILD COMPLETE!*
+
+📁 Project: *{project_name}*
+🧠 Analyzed by: Kimi K2
+💻 Built by: Qwen Coder
+📊 Stats:
+• {result['stats']['files_generated']} files
+• {result['stats']['tests_generated']} tests  
+• Code quality: {result['stats']['review_score']}/10
+• Est. time: {result['stats']['estimated_hours']} hours
+
+🔗 *GitHub Repo (Private):*
+{github_url}
+
+💰 *Cost Savings:*
+Used Kimi ($0.50/M) + Qwen ($0.07/M)
+vs GPT-4o ($2.50/M) = ~90% cheaper!
+
+Built with 🤖 Kimi + Qwen"""
+            
+            await notifier._send_whatsapp_raw(
+                to=settings.YOUR_PHONE_NUMBER,
+                message=success_msg
+            )
+            
+            return {
+                "success": True,
+                "message": "Test build completed! Check WhatsApp.",
+                "project": result
+            }
+        else:
+            error_msg = f"❌ *BUILD FAILED*\n\nError: {result.get('error', 'Unknown')}\n\nCheck logs for details."
+            await notifier._send_whatsapp_raw(
+                to=settings.YOUR_PHONE_NUMBER,
+                message=error_msg
+            )
+            return {"success": False, "error": result.get("error")}
+            
+    except Exception as e:
+        logger.error(f"Test build failed: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return {"success": False, "error": str(e)}
+
+
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
