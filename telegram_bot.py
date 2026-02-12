@@ -262,7 +262,7 @@ The user requirements override default choices (e.g., if user says "use Qwen", u
 Balance cost vs features based on user priorities stated above."""
                 
                 result = await enhanced_build_agent.build_project(
-                    tweet=enhanced_tweet,
+                    tweet_text=enhanced_tweet,
                     username=build_data.get("username", "unknown")
                 )
                 
@@ -322,7 +322,7 @@ Balance cost vs features based on user priorities stated above."""
                 from build_agent_enhanced import enhanced_build_agent
                 
                 result = await enhanced_build_agent.build_project(
-                    tweet=tweet_text,
+                    tweet_text=tweet_text,
                     username=pending.get("username", "unknown")
                 )
                 
