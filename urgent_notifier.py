@@ -185,10 +185,13 @@ Open: https://twitter.com/{username}
 ━━━━━━━━━━━━━━━━━━━━━━
 *Reply with:*
 1️⃣ *INTERESTING* → Share to Discord
-2️⃣ *NOTHING* → Skip this
+2️⃣ *NOTHING* → Skip this  
 3️⃣ *BUILD* → Create project
 ━━━━━━━━━━━━━━━━━━━━━━
-"""
+
+💡 *Quick reply:*
+Type: 1 / 2 / 3
+Or: I / N / B"""
         
         # Use Twilio WhatsApp sandbox number (NOT your regular Twilio number)
         # This is the number you sent "join" message to
