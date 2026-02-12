@@ -60,7 +60,7 @@ class UrgentNotifier:
         """
         Send urgent notification for high-value tweet.
         
-        Tries multiple channels in order of reliability.
+        Priority: Telegram (FREE) → WhatsApp → SMS
         """
         if not self.enabled:
             return {"sent": False, "reason": "Notifications disabled"}
@@ -71,49 +71,47 @@ class UrgentNotifier:
         
         results = {}
         
-        # Try SMS first (most reliable)
-        if self.twilio_sid and self.your_phone:
+        # 1. Try Telegram FIRST (FREE!)
+        if settings.USE_TELEGRAM and self.telegram_bot_token:
             try:
-                result = await self._send_sms(username, tweet, rating)
-                results["sms"] = result
+                from telegram_bot import telegram_bot
+                result = await telegram_bot.send_urgent_tweet(
+                    username=username,
+                    tweet_text=tweet.text,
+                    score=score,
+                    category=rating.get("category", "unknown"),
+                    reason=rating.get("reason", "High value content"),
+                    tweet_id=tweet.id
+                )
+                results["telegram"] = result
                 if result.get("sent"):
-                    logger.info(f"📱 SMS sent for urgent tweet from @{username}")
+                    logger.info(f"📨 Telegram sent for urgent tweet from @{username} (FREE!)")
+                    return {"sent": True, "channels": results, "score": score, "username": username}
             except Exception as e:
-                logger.error(f"SMS failed: {e}")
-                results["sms"] = {"sent": False, "error": str(e)}
+                logger.error(f"Telegram failed: {e}")
+                results["telegram"] = {"sent": False, "error": str(e)}
         
-        # Try WhatsApp
+        # 2. Fallback to WhatsApp (expensive)
         if self.twilio_sid and self.your_phone:
             try:
                 result = await self._send_whatsapp(username, tweet, rating)
                 results["whatsapp"] = result
                 if result.get("sent"):
-                    logger.info(f"💬 WhatsApp sent for urgent tweet from @{username}")
+                    logger.info(f"💬 WhatsApp sent for urgent tweet from @{username} ($$$)")
             except Exception as e:
                 logger.error(f"WhatsApp failed: {e}")
                 results["whatsapp"] = {"sent": False, "error": str(e)}
         
-        # Try Telegram
-        if self.telegram_bot_token:
+        # 3. Last resort: SMS
+        if self.twilio_sid and self.your_phone:
             try:
-                result = await self._send_telegram(username, tweet, rating)
-                results["telegram"] = result
+                result = await self._send_sms(username, tweet, rating)
+                results["sms"] = result
                 if result.get("sent"):
-                    logger.info(f"📨 Telegram sent for urgent tweet from @{username}")
+                    logger.info(f"📱 SMS sent for urgent tweet from @{username} ($$$)")
             except Exception as e:
-                logger.error(f"Telegram failed: {e}")
-                results["telegram"] = {"sent": False, "error": str(e)}
-        
-        # Try Pushover
-        if self.pushover_token:
-            try:
-                result = await self._send_pushover(username, tweet, rating)
-                results["pushover"] = result
-                if result.get("sent"):
-                    logger.info(f"🔔 Pushover sent for urgent tweet from @{username}")
-            except Exception as e:
-                logger.error(f"Pushover failed: {e}")
-                results["pushover"] = {"sent": False, "error": str(e)}
+                logger.error(f"SMS failed: {e}")
+                results["sms"] = {"sent": False, "error": str(e)}
         
         # Return summary
         any_sent = any(r.get("sent") for r in results.values())

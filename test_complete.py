@@ -23,9 +23,9 @@ async def test_complete_flow():
         "OpenRouter Key": bool(settings.OPENROUTER_API_KEY),
         "GitHub Token": bool(settings.GITHUB_TOKEN),
         "GitHub Username": bool(settings.GITHUB_USERNAME),
-        "Twilio SID": bool(settings.TWILIO_ACCOUNT_SID),
-        "Twilio Token": bool(settings.TWILIO_AUTH_TOKEN),
-        "Your Phone": bool(settings.YOUR_PHONE_NUMBER),
+        "Telegram Enabled": settings.USE_TELEGRAM,
+        "Telegram Token": bool(settings.TELEGRAM_BOT_TOKEN),
+        "Telegram Chat ID": bool(settings.TELEGRAM_CHAT_ID),
         "Urgent Notifications": settings.URGENT_NOTIFICATIONS_ENABLED,
     }
     
@@ -38,32 +38,31 @@ async def test_complete_flow():
     
     if not all_good:
         print("\n❌ Some configuration is missing!")
-        print("Add missing env vars to Render: https://dashboard.render.com/web/srv-d66dmm9r0fns73dk3m1g/env")
+        print("Add missing env vars to Render: https://dashboard.render.com")
         return False
     
-    # 2. Test WhatsApp
-    print("\n2️⃣ Testing WhatsApp...")
+    # 2. Test Telegram (PRIMARY - FREE!)
+    print("\n2️⃣ Testing Telegram (FREE)...")
     try:
-        from urgent_notifier import UrgentNotifier
+        from telegram_bot import telegram_bot
         
-        notifier = UrgentNotifier()
-        if notifier.is_configured():
-            print("  ✅ WhatsApp configured")
+        if telegram_bot.enabled:
+            print("  ✅ Telegram configured")
             
             # Send test message
-            await notifier._send_whatsapp_raw(
-                to=settings.YOUR_PHONE_NUMBER,
-                message="""🧪 *SYSTEM TEST*
+            result = await telegram_bot.send_message(
+                chat_id=settings.TELEGRAM_CHAT_ID,
+                text="""🧪 *SYSTEM TEST*
 
 Twitter Monitor Bot is working!
 
 ✅ Configuration: OK
-✅ WhatsApp: Connected
+✅ Telegram: Connected (FREE!)
 ✅ AI Models: Ready (Kimi + Qwen)
 ✅ GitHub: Ready
 
 Monitor runs every 30 minutes.
-You'll get WhatsApp alerts for high-value tweets (8-10/10).
+You'll get Telegram alerts for high-value tweets (8-10/10).
 
 ━━━━━━━━━━━━━━━━━━━━━━
 *When you get alerts, reply:*
@@ -74,12 +73,17 @@ You'll get WhatsApp alerts for high-value tweets (8-10/10).
 
 💡 *Quick reply:* Type 1/2/3 or I/N/B"""
             )
-            print("  ✅ Test message sent! Check your WhatsApp.")
+            
+            if result.get("sent"):
+                print("  ✅ Test message sent! Check your Telegram.")
+            else:
+                print(f"  ❌ Telegram send failed: {result.get('error')}")
+                return False
         else:
-            print("  ❌ WhatsApp not configured")
+            print("  ❌ Telegram not configured")
             return False
     except Exception as e:
-        print(f"  ❌ WhatsApp error: {e}")
+        print(f"  ❌ Telegram error: {e}")
         return False
     
     # 3. Test AI Router
@@ -122,7 +126,7 @@ You'll get WhatsApp alerts for high-value tweets (8-10/10).
     print("✅ ALL SYSTEMS OPERATIONAL!")
     print("=" * 60)
     print(f"""
-📱 WhatsApp: {settings.YOUR_PHONE_NUMBER}
+📱 Notifications: Telegram (FREE!)
 🤖 AI: Kimi K2 (analysis) + Qwen Coder (code)
 📊 Check Interval: 30 minutes
 🎯 Monitored Users: 15
@@ -133,12 +137,12 @@ You'll get WhatsApp alerts for high-value tweets (8-10/10).
 2. AI rates each tweet (0-10)
 3. Score 0-1: Filtered (trash)
 4. Score 2-7: Discord (by category: AI/CRYPTO/etc.)
-5. Score 8-10: WhatsApp → YOU decide:
+5. Score 8-10: Telegram → YOU decide:
    • BUILD → Kimi+Qwen create project
    • INTERESTING → Send to Discord
    • NOTHING → Skip
 
-💰 COST: ~$0.05 per build (40x cheaper than GPT-4o!)
+💰 COST: $0.00 notifications + ~$0.05 per build (40x cheaper than GPT-4o!)
 """)
     
     return True

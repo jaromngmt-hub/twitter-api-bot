@@ -61,9 +61,11 @@ class Settings:
     TWILIO_PHONE_NUMBER: str = os.getenv("TWILIO_PHONE_NUMBER", "")  # Twilio number
     YOUR_PHONE_NUMBER: str = os.getenv("YOUR_PHONE_NUMBER", "")  # Your real number
     
-    # Telegram
+    # Telegram (FREE alternative to WhatsApp!)
     TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
     TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
+    # Use Telegram instead of WhatsApp? (true = Telegram, false = WhatsApp)
+    USE_TELEGRAM: bool = os.getenv("USE_TELEGRAM", "true").lower() == "true"
     
     # Pushover
     PUSHOVER_APP_TOKEN: str = os.getenv("PUSHOVER_APP_TOKEN", "")

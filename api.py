@@ -281,18 +281,80 @@ async def test_config():
     """Check notification configuration."""
     from config import settings
     return {
-        "twilio_account_sid_set": bool(settings.TWILIO_ACCOUNT_SID),
-        "twilio_account_sid_prefix": settings.TWILIO_ACCOUNT_SID[:10] + "..." if settings.TWILIO_ACCOUNT_SID else None,
-        "twilio_phone_number": settings.TWILIO_PHONE_NUMBER,
-        "your_phone_number": settings.YOUR_PHONE_NUMBER,
+        "telegram": {
+            "enabled": settings.USE_TELEGRAM,
+            "bot_token_set": bool(settings.TELEGRAM_BOT_TOKEN),
+            "chat_id_set": bool(settings.TELEGRAM_CHAT_ID),
+        },
+        "twilio": {
+            "account_sid_set": bool(settings.TWILIO_ACCOUNT_SID),
+            "phone_number": settings.TWILIO_PHONE_NUMBER,
+            "your_phone": settings.YOUR_PHONE_NUMBER,
+        },
         "urgent_notifications_enabled": settings.URGENT_NOTIFICATIONS_ENABLED,
         "urgent_min_score": settings.URGENT_MIN_SCORE,
     }
 
 
-@app.post("/api/test/whatsapp")
-async def test_whatsapp():
-    """Send a test WhatsApp urgent notification."""
+@app.post("/api/test/telegram")
+async def test_telegram():
+    """Send a test Telegram message."""
+    from config import settings
+    
+    if not settings.USE_TELEGRAM:
+        return {"success": False, "error": "Telegram disabled. Set USE_TELEGRAM=true"}
+    
+    if not settings.TELEGRAM_BOT_TOKEN:
+        return {"success": False, "error": "TELEGRAM_BOT_TOKEN not set"}
+    
+    if not settings.TELEGRAM_CHAT_ID:
+        return {"success": False, "error": "TELEGRAM_CHAT_ID not set"}
+    
+    try:
+        import httpx
+        
+        message = """🧪 *Test Alert from Twitter Bot*
+
+This is a test message from your Twitter Monitor Bot!
+
+If you see this, Telegram notifications are working ✅
+
+Reply options:
+1️⃣ INTERESTING - Send to Discord
+2️⃣ NOTHING - Skip
+3️⃣ BUILD - Create project"""
+        
+        url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, json={
+                "chat_id": settings.TELEGRAM_CHAT_ID,
+                "text": message,
+                "parse_mode": "Markdown"
+            })
+            
+            if response.status_code == 200:
+                return {
+                    "success": True,
+                    "message": "Test sent! Check your Telegram.",
+                    "cost": "$0.00 (FREE!)"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": f"Telegram API error: {response.text}"
+                }
+                
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/test/urgent-notification")
+async def test_urgent_notification():
+    """
+    Send a test urgent notification.
+    Uses Telegram if configured (FREE), otherwise WhatsApp ($$$).
+    """
     from urgent_notifier import UrgentNotifier
     from models import Tweet
     
@@ -309,7 +371,7 @@ async def test_whatsapp():
         "score": 10,
         "category": "alpha",
         "summary": "Major market-moving announcement detected by AI",
-        "reason": "High engagement and keyword analysis suggest this is significant alpha that requires immediate attention."
+        "reason": "High engagement and keyword analysis suggest this is significant alpha."
     }
     
     try:
@@ -317,10 +379,8 @@ async def test_whatsapp():
             # Check configuration
             config_status = {
                 "enabled": notifier.enabled,
+                "telegram_configured": bool(notifier.telegram_bot_token and settings.USE_TELEGRAM),
                 "twilio_configured": bool(notifier.twilio_sid and notifier.your_phone),
-                "twilio_sid_set": bool(notifier.twilio_sid),
-                "your_phone_set": bool(notifier.your_phone),
-                "telegram_configured": bool(notifier.telegram_bot_token),
                 "pushover_configured": bool(notifier.pushover_token),
             }
             
@@ -329,15 +389,7 @@ async def test_whatsapp():
                     "success": False,
                     "error": "No notification channels configured",
                     "config": config_status,
-                    "message": "Add TWILIO_* environment variables to enable WhatsApp"
-                }
-            
-            if not notifier.enabled:
-                return {
-                    "success": False, 
-                    "error": "Notifications disabled",
-                    "config": config_status,
-                    "message": "Set URGENT_NOTIFICATIONS_ENABLED=true to enable"
+                    "message": "Set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID (FREE) or TWILIO_* ($$$)"
                 }
             
             result = await notifier.send_urgent_notification(
@@ -346,15 +398,100 @@ async def test_whatsapp():
                 rating=test_rating
             )
             
+            # Determine cost
+            cost = "$0.00 (Telegram - FREE!)" if result.get("telegram", {}).get("sent") else "$0.04 (WhatsApp)"
+            
             return {
                 "success": result["sent"],
-                "message": "Test WhatsApp sent! Check your phone." if result["sent"] else "Failed to send",
+                "message": "Test sent! Check your phone." if result["sent"] else "Failed to send",
+                "cost": cost,
                 "config": config_status,
                 "details": result
             }
     except Exception as e:
         import traceback
         return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
+
+
+@app.post("/api/test/whatsapp")
+async def test_whatsapp():
+    """DEPRECATED: Use /api/test/urgent-notification instead."""
+    return {
+        "deprecated": True,
+        "message": "Use /api/test/urgent-notification instead",
+        "note": "Telegram is now the primary notification method (FREE!)"
+    }
+
+
+@app.post("/api/webhook/telegram")
+async def telegram_webhook(request: dict):
+    """
+    Receive Telegram messages and callback queries.
+    
+    Handles:
+    - Reply buttons: INTERESTING/NOTHING/BUILD
+    - Direct text replies: 1/2/3 or I/N/B
+    """
+    from telegram_bot import telegram_bot
+    
+    try:
+        # Handle callback queries (button clicks)
+        if "callback_query" in request:
+            callback = request["callback_query"]
+            data = callback.get("data", "")
+            chat_id = callback["message"]["chat"]["id"]
+            message_id = callback["message"]["message_id"]
+            
+            logger.info(f"Telegram callback: {data}")
+            
+            # Parse action and tweet_id
+            parts = data.split(":", 1)
+            action = parts[0]
+            tweet_id = parts[1] if len(parts) > 1 else None
+            
+            # Process action
+            result = await telegram_bot.process_reply(action, tweet_id)
+            
+            # Answer callback
+            await telegram_bot.answer_callback(callback["id"], result.get("message", "Done!"))
+            
+            # Update message to show action taken
+            await telegram_bot.update_message(chat_id, message_id, action, result)
+            
+            return {"ok": True}
+        
+        # Handle direct messages (text replies)
+        if "message" in request:
+            message = request["message"]
+            chat_id = message["chat"]["id"]
+            text = message.get("text", "").strip().upper()
+            
+            logger.info(f"Telegram message from {chat_id}: {text}")
+            
+            # Map replies to actions
+            action_map = {
+                "1": "INTERESTING", "I": "INTERESTING", "INTERESTING": "INTERESTING",
+                "2": "NOTHING", "N": "NOTHING", "NOTHING": "NOTHING",
+                "3": "BUILD", "B": "BUILD", "BUILD": "BUILD",
+            }
+            
+            action = action_map.get(text)
+            if action:
+                result = await telegram_bot.process_reply(action)
+                await telegram_bot.send_message(chat_id, result.get("message", f"Action: {action}"))
+            else:
+                await telegram_bot.send_message(
+                    chat_id, 
+                    "Reply with:\n1️⃣/I = INTERESTING\n2️⃣/N = NOTHING\n3️⃣/B = BUILD"
+                )
+            
+            return {"ok": True}
+        
+        return {"ok": True}
+        
+    except Exception as e:
+        logger.error(f"Telegram webhook error: {e}")
+        return {"ok": False, "error": str(e)}
 
 
 @app.post("/api/webhook/twilio/whatsapp")
@@ -364,7 +501,7 @@ async def twilio_whatsapp_webhook(
     MessageSid: str = ""
 ):
     """
-    Receive WhatsApp replies from Twilio.
+    Receive WhatsApp replies from Twilio (fallback).
     
     User replies to urgent tweets with:
     - INTERESTING → Send to Discord
