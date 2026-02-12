@@ -22,8 +22,8 @@ class Settings:
     # Database
     DATABASE_PATH: str = os.getenv("DATABASE_PATH", "./monitor.db")
     
-    # Monitoring
-    CHECK_INTERVAL_SECONDS: int = int(os.getenv("CHECK_INTERVAL_SECONDS", "300"))
+    # Monitoring (default: 30 minutes = 1800 seconds)
+    CHECK_INTERVAL_SECONDS: int = int(os.getenv("CHECK_INTERVAL_SECONDS", "1800"))
     MAX_TWEETS_PER_CHECK: int = int(os.getenv("MAX_TWEETS_PER_CHECK", "20"))
     
     # Logging
