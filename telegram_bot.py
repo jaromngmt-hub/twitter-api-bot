@@ -212,19 +212,18 @@ Choose action ⬇️"""
         # Send requirements request
         message = f"""🔨 BUILD: [{alert_id}]
 
-You clicked BUILD on:
-💬 {pending.get('text', '')[:150]}...
+Original idea:
+💬 {pending.get('text', '')[:200]}...
 
-📝 CUSTOMIZE YOUR BUILD:
-Kimi will analyze BOTH the tweet AND your requirements together.
+📝 ADD YOUR INPUT:
+Reply with any tips, requirements, or info for Kimi to consider.
 
-Reply with specific instructions, e.g.:
-
-• "Use Qwen Coder from OpenRouter (cheaper than Claude)"
-• "Support La Liga, Premier League, Bundesliga - not just one"
-• "Add SMS alerts for big wins"
-• "Make it a Chrome extension, not web app"
-• "Skip UI - just API endpoints + SQLite"
+Examples of what you can write:
+- "Use Qwen Coder instead of Claude to save money"
+- "Focus on La Liga, not Premier League"
+- "I want SMS alerts when bets win"
+- "Skip the fancy UI, keep it simple"
+- "Make it a Telegram bot, not web app"
 
 Or reply "DEFAULT" to build as-is."""
 
