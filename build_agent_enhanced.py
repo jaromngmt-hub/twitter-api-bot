@@ -144,11 +144,17 @@ class EnhancedBuildAgent:
     """
     
     def __init__(self):
+        # Use AI Router for BEST model selection (Qwen for code - cheap + excellent!)
+        self.ai_router = ai_router
         self.openai = AsyncOpenAI(api_key=settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None
         self.github_token = settings.GITHUB_TOKEN
         self.github_username = settings.GITHUB_USERNAME
         self.projects_dir = "./projects"
         os.makedirs(self.projects_dir, exist_ok=True)
+        
+        # Log which model we're using for code
+        code_model = settings.CODE_MODEL if hasattr(settings, 'CODE_MODEL') else 'qwen-coder'
+        logger.info(f"BuildAgent initialized - Using {code_model} for code generation (40x cheaper than GPT-4o!)")
     
     # ═══════════════════════════════════════════════════════════════
     # STAGE 1: ANALYZE - Extract structured requirements from tweet
@@ -166,17 +172,14 @@ class EnhancedBuildAgent:
         prompt = RequirementsEngineeringSkill.extract_requirements_prompt(tweet_text, username)
 
         try:
-            response = await self.openai.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": f"You are a senior product manager using Shape Up methodology (from Basecamp). {RequirementsEngineeringSkill.SHAPE_UP_PRINCIPLES}"},
-                    {"role": "user", "content": prompt}
-                ],
+            # Use AI Router for best model selection
+            content = await self.ai_router.generate(
+                prompt=prompt,
+                task_type="requirements",
                 temperature=0.3,
                 max_tokens=1500
             )
             
-            content = response.choices[0].message.content
             content = self._extract_json(content)
             data = json.loads(content)
             
@@ -459,17 +462,14 @@ Respond in JSON:
     "risks": [...]
 }}"""
 
-        response = await self.openai.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": f"You are a staff software architect. Choose the RIGHT tool for the job, not always React/Next.js. Consider: simplicity, team expertise, time constraints, and project needs. {SystemArchitectureSkill.SCALABILITY_PATTERNS}"},
-                {"role": "user", "content": prompt}
-            ],
+        # Use AI Router for architecture (uses Claude or GPT-4o for complex reasoning)
+        content = await self.ai_router.generate(
+            prompt=prompt,
+            task_type="architecture",
             temperature=0.4,
             max_tokens=2500
         )
         
-        content = response.choices[0].message.content
         content = self._extract_json(content)
         data = json.loads(content)
         
@@ -536,17 +536,14 @@ Design:
 
 Respond in JSON with tech_stack, components, api_endpoints, etc."""
 
-        response = await self.openai.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are an AI engineer specializing in Vercel AI SDK. Design modern AI applications with streaming, tool calling, and great UX."},
-                {"role": "user", "content": prompt}
-            ],
+        # Use AI Router for AI architecture planning
+        content = await self.ai_router.generate(
+            prompt=prompt,
+            task_type="architecture",
             temperature=0.4,
             max_tokens=2500
         )
         
-        content = response.choices[0].message.content
         content = self._extract_json(content)
         data = json.loads(content)
         
@@ -1066,17 +1063,15 @@ Tests should FAIL initially (we haven't written the code yet).
 
 Only output the test code."""
 
-        response = await self.openai.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": f"You are a TDD expert. Apply patterns from Awesome Testing. {TDDSkill.BEST_PRACTICES}"},
-                {"role": "user", "content": prompt}
-            ],
+        # Use AI Router with QWEN CODER for tests (cheap + excellent!)
+        content = await self.ai_router.generate(
+            prompt=prompt,
+            task_type="code",
             temperature=0.3,
             max_tokens=2000
         )
         
-        return self._clean_code(response.choices[0].message.content)
+        return self._clean_code(content)
     
     async def _generate_implementation(self, file_path: str, component: Component, plan: ProjectPlan, tests: str) -> str:
         """Generate implementation to pass the tests."""
@@ -1103,12 +1098,10 @@ Requirements:
 
 Only output the implementation code."""
 
-        response = await self.openai.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are a senior software engineer writing production-quality code. Follow clean code principles and SOLID design."},
-                {"role": "user", "content": prompt}
-            ],
+        # Use AI Router with QWEN CODER for implementation (cheap + excellent code!)
+        content = await self.ai_router.generate(
+            prompt=prompt,
+            task_type="code",
             temperature=0.3,
             max_tokens=2500
         )
@@ -1132,17 +1125,14 @@ Only output the implementation code."""
         
         prompt = CodeReviewSkill.review_prompt(all_code, plan.tech_stack.language)
 
-        response = await self.openai.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": f"You are a staff engineer performing code review. Apply Google Engineering Practices. {CodeReviewSkill.GOOGLE_REVIEW_CHECKLIST}"},
-                {"role": "user", "content": prompt}
-            ],
+        # Use AI Router for code review (uses Claude for critical analysis)
+        content = await self.ai_router.generate(
+            prompt=prompt,
+            task_type="review",
             temperature=0.3,
             max_tokens=2000
         )
         
-        content = response.choices[0].message.content
         content = self._extract_json(content)
         data = json.loads(content)
         
@@ -1369,17 +1359,14 @@ jobs:
                 plan.tech_stack.deployment
             )
 
-        response = await self.openai.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": f"Generate production-ready CI/CD. Apply patterns from GitHub Actions Awesome. {DevOpsSkill.GITHUB_ACTIONS_PATTERNS}"},
-                {"role": "user", "content": prompt}
-            ],
+        # Use AI Router for CI/CD generation (uses Qwen - cheap and good enough for configs)
+        cicd_content = await self.ai_router.generate(
+            prompt=prompt,
+            task_type="docs",
             temperature=0.3,
             max_tokens=2500
         )
         
-        cicd_content = response.choices[0].message.content
         cicd_content = self._clean_code(cicd_content)
         files[".github/workflows/ci.yml"] = cicd_content
         
@@ -1396,17 +1383,15 @@ Requirements:
 - Run as non-root user
 - Include .dockerignore recommendations
 """
-            response = await self.openai.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "You are a DevOps engineer specializing in Docker."},
-                    {"role": "user", "content": dockerfile_prompt}
-                ],
+            # Use AI Router for Dockerfile (Qwen is fine for this)
+            dockerfile = await self.ai_router.generate(
+                prompt=dockerfile_prompt,
+                task_type="code",
                 temperature=0.3,
                 max_tokens=1000
             )
             
-            dockerfile = self._clean_code(response.choices[0].message.content)
+            dockerfile = self._clean_code(dockerfile)
             files["Dockerfile"] = dockerfile
             files[".dockerignore"] = "__pycache__\n*.pyc\n.env\n.git\n.gitignore\n.pytest_cache\n"
         
