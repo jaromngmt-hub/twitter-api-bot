@@ -161,8 +161,7 @@ Reply with buttons below ⬇️"""
                     json={
                         "chat_id": chat_id,
                         "message_id": message_id,
-                        "text": f"{emoji} *Action Taken: {action}*\n\n{result.get('message', 'Processing...')}",
-                        "parse_mode": "Markdown"
+                        "text": f"{emoji} Action Taken: {action}\n\n{result.get('message', 'Processing...')}"
                     }
                 )
         except Exception as e:
