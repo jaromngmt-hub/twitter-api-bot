@@ -38,20 +38,19 @@ class TelegramBot:
         if not self.enabled:
             return {"sent": False, "error": "Telegram not configured"}
         
-        # Truncate tweet text
-        display_text = tweet_text[:350] + "..." if len(tweet_text) > 350 else tweet_text
+        # Truncate tweet text (no formatting to avoid parse errors)
+        display_text = tweet_text[:300] + "..." if len(tweet_text) > 300 else tweet_text
+        reason_clean = reason[:80] + "..." if len(reason) > 80 else reason
         
-        # Use HTML for safe formatting
-        from html import escape
-        message = f"""🚨 <b>URGENT TWEET {score}/10</b>
+        message = f"""🚨 URGENT TWEET {score}/10
 
 👤 @{username}
 📊 Category: {category.upper()}
 
-💬 <b>Tweet:</b>
-<code>{escape(display_text)}</code>
+💬 Tweet:
+{display_text}
 
-📝 <b>Why:</b> {escape(reason[:100])}
+📝 Why: {reason_clean}
 
 Reply with buttons below ⬇️"""
 
@@ -73,7 +72,6 @@ Reply with buttons below ⬇️"""
                     json={
                         "chat_id": self.chat_id,
                         "text": message,
-                        "parse_mode": "HTML",
                         "reply_markup": keyboard,
                         "disable_web_page_preview": True
                     }
