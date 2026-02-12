@@ -276,6 +276,20 @@ async def health_check():
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 
+@app.get("/api/test/config")
+async def test_config():
+    """Check notification configuration."""
+    from config import settings
+    return {
+        "twilio_account_sid_set": bool(settings.TWILIO_ACCOUNT_SID),
+        "twilio_account_sid_prefix": settings.TWILIO_ACCOUNT_SID[:10] + "..." if settings.TWILIO_ACCOUNT_SID else None,
+        "twilio_phone_number": settings.TWILIO_PHONE_NUMBER,
+        "your_phone_number": settings.YOUR_PHONE_NUMBER,
+        "urgent_notifications_enabled": settings.URGENT_NOTIFICATIONS_ENABLED,
+        "urgent_min_score": settings.URGENT_MIN_SCORE,
+    }
+
+
 @app.post("/api/test/whatsapp")
 async def test_whatsapp():
     """Send a test WhatsApp urgent notification."""
@@ -300,10 +314,21 @@ async def test_whatsapp():
     
     try:
         async with UrgentNotifier() as notifier:
+            # Check configuration
+            config_status = {
+                "enabled": notifier.enabled,
+                "twilio_configured": bool(notifier.twilio_sid and notifier.your_phone),
+                "twilio_sid_set": bool(notifier.twilio_sid),
+                "your_phone_set": bool(notifier.your_phone),
+                "telegram_configured": bool(notifier.telegram_bot_token),
+                "pushover_configured": bool(notifier.pushover_token),
+            }
+            
             if not notifier.is_configured():
                 return {
                     "success": False,
-                    "error": "WhatsApp not configured",
+                    "error": "No notification channels configured",
+                    "config": config_status,
                     "message": "Add TWILIO_* environment variables to enable WhatsApp"
                 }
             
@@ -311,6 +336,7 @@ async def test_whatsapp():
                 return {
                     "success": False, 
                     "error": "Notifications disabled",
+                    "config": config_status,
                     "message": "Set URGENT_NOTIFICATIONS_ENABLED=true to enable"
                 }
             
@@ -323,10 +349,12 @@ async def test_whatsapp():
             return {
                 "success": result["sent"],
                 "message": "Test WhatsApp sent! Check your phone." if result["sent"] else "Failed to send",
+                "config": config_status,
                 "details": result
             }
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        import traceback
+        return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
 
 
 if __name__ == "__main__":
