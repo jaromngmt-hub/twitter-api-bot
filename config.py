@@ -49,6 +49,24 @@ class Settings:
     ENABLE_AI_ANALYSIS: bool = os.getenv("ENABLE_AI_ANALYSIS", "true").lower() == "true"
     AI_MIN_SCORE_TO_SEND: int = int(os.getenv("AI_MIN_SCORE_TO_SEND", "4"))  # Filter < 4
     
+    # Urgent Notifications (Score 9-10 to phone)
+    URGENT_NOTIFICATIONS_ENABLED: bool = os.getenv("URGENT_NOTIFICATIONS_ENABLED", "false").lower() == "true"
+    URGENT_MIN_SCORE: int = int(os.getenv("URGENT_MIN_SCORE", "9"))  # Only 9-10 scores
+    
+    # Twilio (SMS/WhatsApp)
+    TWILIO_ACCOUNT_SID: str = os.getenv("TWILIO_ACCOUNT_SID", "")
+    TWILIO_AUTH_TOKEN: str = os.getenv("TWILIO_AUTH_TOKEN", "")
+    TWILIO_PHONE_NUMBER: str = os.getenv("TWILIO_PHONE_NUMBER", "")  # Twilio number
+    YOUR_PHONE_NUMBER: str = os.getenv("YOUR_PHONE_NUMBER", "")  # Your real number
+    
+    # Telegram
+    TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
+    
+    # Pushover
+    PUSHOVER_APP_TOKEN: str = os.getenv("PUSHOVER_APP_TOKEN", "")
+    PUSHOVER_USER_KEY: str = os.getenv("PUSHOVER_USER_KEY", "")
+    
     # TwitterAPI
     TWITTERAPI_BASE_URL: str = "https://api.twitterapi.io"
     TWITTERAPI_TIMEOUT: int = 30

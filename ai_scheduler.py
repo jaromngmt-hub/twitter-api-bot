@@ -6,6 +6,7 @@ from typing import List, Optional
 
 from loguru import logger
 
+from action_handler import ActionHandler
 from ai_analyzer import AIAnalyzer, TweetRating
 from config import settings
 from database import db
@@ -17,6 +18,7 @@ from twitter_client import (
     TwitterNotFoundError,
     TwitterRateLimitError,
 )
+from urgent_notifier import UrgentNotifier
 
 
 class AIScheduler:
@@ -43,7 +45,8 @@ class AIScheduler:
         user: UserWithChannel,
         twitter: TwitterClient,
         discord: TieredDiscordClient,
-        analyzer: Optional[AIAnalyzer] = None
+        analyzer: Optional[AIAnalyzer] = None,
+        urgent_notifier: Optional[UrgentNotifier] = None
     ) -> None:
         """Process a single user with AI analysis."""
         async with self._semaphore:
@@ -186,6 +189,27 @@ class AIScheduler:
                 logger.info(
                     f"Sent tier {result['tier']} tweet {tweet.id} from @{user.username}"
                 )
+                
+                # 🚨 URGENT NOTIFICATION for score 9-10
+                if urgent_notifier and rating and rating.score >= 9:
+                    try:
+                        notify_result = await urgent_notifier.send_urgent_notification(
+                            user.username,
+                            tweet,
+                            {
+                                "score": rating.score,
+                                "category": rating.category,
+                                "summary": rating.summary,
+                                "reason": rating.reason
+                            }
+                        )
+                        if notify_result["sent"]:
+                            logger.info(f"🚨 URGENT notification sent for @{user.username} (score: {rating.score})")
+                        else:
+                            logger.warning(f"Failed to send urgent notification: {notify_result}")
+                    except Exception as e:
+                        logger.error(f"Urgent notification error: {e}")
+                
             else:
                 if "filtered" in result.get("reason", "").lower():
                     logger.info(f"Filtered low-value tweet from @{user.username}")
@@ -238,15 +262,28 @@ class AIScheduler:
         async with TwitterClient() as twitter:
             async with TieredDiscordClient() as discord:
                 analyzer = None
+                urgent_notifier = None
+                
                 if self.enable_ai:
                     try:
                         analyzer = AIAnalyzer()
                         logger.info("AI analyzer initialized")
                     except Exception as e:
                         logger.error(f"Failed to initialize AI analyzer: {e}")
+                    
+                    # Initialize urgent notifier for score 9-10
+                    if settings.URGENT_NOTIFICATIONS_ENABLED:
+                        try:
+                            urgent_notifier = UrgentNotifier()
+                            if urgent_notifier.is_configured():
+                                logger.info(f"🚨 Urgent notifier initialized (min score: {settings.URGENT_MIN_SCORE})")
+                            else:
+                                logger.warning("Urgent notifications enabled but not configured")
+                        except Exception as e:
+                            logger.error(f"Failed to initialize urgent notifier: {e}")
                 
                 tasks = [
-                    self._process_user(user, twitter, discord, analyzer)
+                    self._process_user(user, twitter, discord, analyzer, urgent_notifier)
                     for user in users
                 ]
                 
@@ -271,6 +308,9 @@ class AIScheduler:
         logger.info(f"AI Analysis: {'ENABLED' if self.enable_ai else 'DISABLED'}")
         if self.enable_ai:
             logger.info(f"Minimum score to send: {self.min_score}")
+            logger.info(f"Urgent Notifications: {'ENABLED' if settings.URGENT_NOTIFICATIONS_ENABLED else 'DISABLED'}")
+            if settings.URGENT_NOTIFICATIONS_ENABLED:
+                logger.info(f"  → Min score for phone alert: {settings.URGENT_MIN_SCORE}")
         
         try:
             while self.running:
