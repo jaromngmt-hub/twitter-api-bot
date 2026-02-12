@@ -1,13 +1,21 @@
 #!/usr/bin/env python3
-"""Enhanced Build Agent with industry best practices and skills.
+"""Enhanced Build Agent with famous GitHub skills.
+
+Skills integrated from top GitHub repos:
+1. ANALYZE - Shape Up (Basecamp) - Requirements Engineering
+2. PLAN - System Design Primer (270k stars) - Architecture patterns
+3. DESIGN - Google Technical Writing Course - Documentation
+4. IMPLEMENT - Awesome Testing + Jest/Pytest best practices - TDD
+5. REVIEW - Google Engineering Practices (40k stars) - Code review
+6. DEPLOY - GitHub Actions Awesome (30k stars) - CI/CD, Docker
 
 Pipeline stages:
-1. ANALYZE - Extract requirements from tweet
-2. PLAN - Architecture & tech stack selection  
-3. DESIGN - API design, data models, UI mockups
-4. IMPLEMENT - Code generation with tests
-5. REVIEW - Code review & security check
-6. DEPLOY - CI/CD setup & deployment
+1. ANALYZE - Extract requirements using Shape Up methodology
+2. PLAN - Architecture using System Design Primer patterns
+3. DESIGN - API/docs using Google Technical Writing standards
+4. IMPLEMENT - TDD with tests first (Awesome Testing patterns)
+5. REVIEW - Code review using Google & OWASP checklists
+6. DEPLOY - CI/CD using GitHub Actions best practices
 """
 
 import asyncio
@@ -25,6 +33,14 @@ from loguru import logger
 from openai import AsyncOpenAI
 
 from config import settings
+from build_skills import (
+    RequirementsEngineeringSkill,
+    SystemArchitectureSkill,
+    TechnicalWritingSkill,
+    TDDSkill,
+    CodeReviewSkill,
+    DevOpsSkill,
+)
 
 
 class BuildStage(Enum):
@@ -134,42 +150,20 @@ class EnhancedBuildAgent:
     
     async def analyze_tweet(self, tweet_text: str, username: str) -> Optional[ProjectRequirements]:
         """
-        Use Requirements Engineering skills to extract structured requirements.
+        Stage 1: ANALYZE using Shape Up methodology (from Basecamp).
         
-        Prompt engineering technique: Chain-of-Thought + Structured Output
+        Skill: RequirementsEngineeringSkill
+        Source: basecamp/shape_up, Joel on Software
         """
-        prompt = f"""Analyze this tweet and extract structured project requirements using software engineering best practices.
-
-Tweet from @{username}:
-"{tweet_text}"
-
-Extract the following using requirements engineering principles:
-
-1. **Problem Statement**: What problem does this solve?
-2. **Target Users**: Who would use this?
-3. **Core Features**: What are the must-have features? (3-5 features)
-4. **Constraints**: Technical, time, or resource limitations
-5. **Success Criteria**: How do we know this works?
-
-Respond in JSON:
-{{
-    "is_buildable": true/false,
-    "project_name": "kebab-case-name",
-    "description": "One sentence pitch",
-    "problem_statement": "The problem...",
-    "target_users": "Who uses this",
-    "core_features": ["feature 1", "feature 2", "feature 3"],
-    "constraints": ["constraint 1"],
-    "success_criteria": ["criteria 1"]
-}}
-
-If not buildable: {{"is_buildable": false, "reason": "..."}}"""
+        logger.info(f"Stage 1/6: ANALYZE - Extracting requirements using Shape Up methodology")
+        
+        prompt = RequirementsEngineeringSkill.extract_requirements_prompt(tweet_text, username)
 
         try:
             response = await self.openai.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": "You are a senior product manager and requirements engineer. Extract clear, actionable requirements from vague descriptions."},
+                    {"role": "system", "content": f"You are a senior product manager using Shape Up methodology (from Basecamp). {RequirementsEngineeringSkill.SHAPE_UP_PRINCIPLES}"},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.3,
@@ -183,6 +177,8 @@ If not buildable: {{"is_buildable": false, "reason": "..."}}"""
             if not data.get("is_buildable"):
                 logger.info(f"Tweet from @{username} not buildable: {data.get('reason')}")
                 return None
+            
+            logger.info(f"✅ Analysis complete: {data['project_name']} (appetite: {data.get('appetite', 'unknown')})")
             
             return ProjectRequirements(
                 name=data["project_name"],
@@ -205,73 +201,23 @@ If not buildable: {{"is_buildable": false, "reason": "..."}}"""
     
     async def create_architecture_plan(self, requirements: ProjectRequirements) -> ProjectPlan:
         """
-        Use Architecture Design Patterns to create a solid technical plan.
+        Stage 2: PLAN using System Design Primer patterns.
         
-        Skills: System design, technology selection, microservices patterns
+        Skill: SystemArchitectureSkill
+        Source: donnemartin/system-design-primer (270k stars), Awesome Scalability
         """
-        prompt = f"""Design a technical architecture for this project:
-
-Project: {requirements.name}
-Description: {requirements.description}
-Problem: {requirements.problem_statement}
-Target Users: {requirements.target_users}
-Features: {', '.join(requirements.core_features)}
-Constraints: {', '.join(requirements.constraints)}
-
-Design decisions to make:
-1. **Tech Stack**: Choose language, framework, database, deployment platform
-2. **Architecture Pattern**: Monolith, microservices, serverless, or modular
-3. **Components**: Break into logical components/services
-4. **Data Model**: Key entities and relationships
-5. **API Design**: Main endpoints needed
-
-Use these principles:
-- Choose proven, well-documented technologies
-- Prefer simplicity over complexity
-- Consider the constraints
-- Design for the features needed, not hypothetical future needs
-
-Respond in JSON:
-{{
-    "tech_stack": {{
-        "language": "...",
-        "framework": "...",
-        "database": "... or null",
-        "frontend": "... or null",
-        "deployment": "...",
-        "testing": "...",
-        "ci_cd": "GitHub Actions",
-        "reasoning": "Why these choices..."
-    }},
-    "architecture_pattern": "monolith/microservices/serverless",
-    "components": [
-        {{
-            "name": "...",
-            "type": "api/database/frontend/worker",
-            "description": "...",
-            "responsibilities": ["..."],
-            "dependencies": ["..."],
-            "files": ["..."]
-        }}
-    ],
-    "api_endpoints": [
-        {{"method": "GET", "path": "/...", "description": "..."}}
-    ],
-    "data_models": [
-        {{"name": "...", "fields": ["..."], "relationships": ["..."]}}
-    ],
-    "file_structure": {{
-        "root": ["file1", "file2"],
-        "src/": ["..."]
-    }},
-    "estimated_hours": 5,
-    "risks": ["risk 1", "risk 2"]
-}}"""
+        logger.info(f"Stage 2/6: PLAN - Designing architecture using System Design Primer patterns")
+        
+        prompt = SystemArchitectureSkill.design_architecture_prompt({
+            "name": requirements.name,
+            "appetite": getattr(requirements, 'appetite', 'unknown'),
+            "features": requirements.core_features
+        })
 
         response = await self.openai.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are a staff software architect with 15 years experience. Design pragmatic, scalable architectures. Prefer boring technology that works."},
+                {"role": "system", "content": f"You are a staff software architect. Apply patterns from System Design Primer. {SystemArchitectureSkill.SCALABILITY_PATTERNS}"},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.4,
@@ -284,6 +230,8 @@ Respond in JSON:
         
         tech_stack = TechStack(**data["tech_stack"])
         components = [Component(**c) for c in data["components"]]
+        
+        logger.info(f"✅ Architecture planned: {data.get('architecture_pattern')} with {len(components)} components")
         
         return ProjectPlan(
             requirements=requirements,
@@ -302,11 +250,12 @@ Respond in JSON:
     
     async def create_design_docs(self, plan: ProjectPlan) -> Dict[str, str]:
         """
-        Create detailed design documents.
+        Stage 3: DESIGN using Google Technical Writing standards.
         
-        Skills: Technical specification writing, API documentation
+        Skill: TechnicalWritingSkill
+        Source: Google Technical Writing Course (10k stars)
         """
-        docs = {}
+        logger.info(f"Stage 3/6: DESIGN - Creating docs using Google Technical Writing standards")
         
         # API Specification
         if plan.api_endpoints:
@@ -343,9 +292,15 @@ Respond in JSON:
     
     async def generate_code(self, plan: ProjectPlan, component: Component) -> List[CodeFile]:
         """
-        Generate code using TDD principles.
+        Stage 4: IMPLEMENT using Test-Driven Development (TDD).
         
-        Skills: TDD, clean code, SOLID principles, design patterns
+        Skill: TDDSkill
+        Source: Awesome Testing, Jest/Pytest best practices
+        
+        Follows Red-Green-Refactor cycle:
+        1. Write failing test (Red)
+        2. Write code to pass test (Green)
+        3. Refactor while keeping tests passing
         """
         files = []
         
@@ -370,7 +325,12 @@ Respond in JSON:
         return files
     
     async def _generate_tests(self, file_path: str, component: Component, plan: ProjectPlan) -> str:
-        """Generate tests first (TDD approach)."""
+        """
+        Stage 4a: Write tests FIRST (TDD - Red phase).
+        
+        Skill: TDDSkill
+        Source: Awesome Testing, Jest/Pytest best practices
+        """
         prompt = f"""Write comprehensive unit tests for {file_path}.
 
 Component: {component.name}
@@ -379,18 +339,21 @@ Description: {component.description}
 Responsibilities: {', '.join(component.responsibilities)}
 Tech Stack: {plan.tech_stack.language}, {plan.tech_stack.testing}
 
-Write tests that:
-1. Test happy path
-2. Test edge cases
-3. Test error handling
-4. Use mocking for dependencies
+Apply TDD principles:
+{TDDSkill.TDD_CYCLE}
+
+Apply testing best practices:
+{TDDSkill.BEST_PRACTICES}
+
+Write tests using AAA pattern (Arrange, Act, Assert).
+Tests should FAIL initially (we haven't written the code yet).
 
 Only output the test code."""
 
         response = await self.openai.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": f"You are a TDD expert writing {plan.tech_stack.testing} tests. Write thorough, realistic tests."},
+                {"role": "system", "content": f"You are a TDD expert. Apply patterns from Awesome Testing. {TDDSkill.BEST_PRACTICES}"},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.3,
@@ -442,48 +405,21 @@ Only output the implementation code."""
     
     async def review_code(self, files: List[CodeFile], plan: ProjectPlan) -> ReviewResult:
         """
-        Perform code review using best practices.
+        Stage 5: REVIEW using Google Engineering Practices + OWASP.
         
-        Skills: Code review, security scanning, performance analysis
+        Skill: CodeReviewSkill
+        Source: google/eng-practices (40k stars), OWASP Secure Code Review
         """
+        logger.info(f"Stage 5/6: REVIEW - Code review using Google & OWASP standards")
+        
         all_code = "\n\n".join([f"=== {f.path} ===\n{f.content}" for f in files])
         
-        prompt = f"""Perform a thorough code review of this codebase.
-
-Tech Stack: {plan.tech_stack.language}, {plan.tech_stack.framework}
-
-Code to review:
-{all_code}
-
-Review checklist:
-1. **Code Quality**: Readability, naming, structure
-2. **Security**: SQL injection, XSS, secrets handling, input validation
-3. **Error Handling**: Try/catch, error messages, recovery
-4. **Performance**: Efficiency, unnecessary operations
-5. **Best Practices**: Following language/framework conventions
-6. **Testing**: Test coverage, edge cases
-
-Respond in JSON:
-{{
-    "score": 8,
-    "passed": true,
-    "issues": [
-        {{
-            "severity": "high/medium/low",
-            "file": "...",
-            "line": "...",
-            "issue": "...",
-            "fix": "..."
-        }}
-    ],
-    "suggestions": ["suggestion 1", "suggestion 2"],
-    "security_concerns": ["concern 1"]
-}}"""
+        prompt = CodeReviewSkill.review_prompt(all_code, plan.tech_stack.language)
 
         response = await self.openai.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are a staff engineer performing code review. Be thorough but constructive. Focus on real issues, not nitpicks."},
+                {"role": "system", "content": f"You are a staff engineer performing code review. Apply Google Engineering Practices. {CodeReviewSkill.GOOGLE_REVIEW_CHECKLIST}"},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.3,
@@ -493,6 +429,8 @@ Respond in JSON:
         content = response.choices[0].message.content
         content = self._extract_json(content)
         data = json.loads(content)
+        
+        logger.info(f"✅ Code review complete: Score {data['score']}/10, Passed: {data['passed']}")
         
         return ReviewResult(
             score=data["score"],
@@ -508,76 +446,70 @@ Respond in JSON:
     
     async def generate_cicd_files(self, plan: ProjectPlan) -> Dict[str, str]:
         """
-        Generate CI/CD configuration.
+        Stage 6: DEPLOY using GitHub Actions & Docker best practices.
         
-        Skills: DevOps, GitHub Actions, Docker, deployment automation
+        Skill: DevOpsSkill
+        Source: Awesome GitHub Actions (30k stars), Docker Best Practices (30k stars)
         """
+        logger.info(f"Stage 6/6: DEPLOY - Generating CI/CD using GitHub Actions best practices")
+        
         files = {}
         
-        # GitHub Actions workflow
-        workflow = f"""name: CI/CD Pipeline
+        prompt = DevOpsSkill.generate_cicd_prompt(
+            {
+                "language": plan.tech_stack.language,
+                "framework": plan.tech_stack.framework,
+                "testing": plan.tech_stack.testing
+            },
+            plan.tech_stack.deployment
+        )
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: Set up {plan.tech_stack.language}
-      uses: actions/setup-{plan.tech_stack.language}@v3
-      with:
-        {'python-version' if 'python' in plan.tech_stack.language.lower() else 'node-version'}: '{'3.11' if 'python' in plan.tech_stack.language.lower() else '18'}'
-    
-    - name: Install dependencies
-      run: {'pip install -r requirements.txt' if 'python' in plan.tech_stack.language.lower() else 'npm install'}
-    
-    - name: Run tests
-      run: {'pytest --cov' if 'python' in plan.tech_stack.language.lower() else 'npm test'}
-    
-    - name: Run linter
-      run: {'flake8' if 'python' in plan.tech_stack.language.lower() else 'eslint .'}
-    
-    - name: Security scan
-      run: {'bandit -r .' if 'python' in plan.tech_stack.language.lower() else 'npm audit'}
-
-  deploy:
-    needs: test
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: Deploy to {plan.tech_stack.deployment}
-      run: echo "Deploying..."
-"""
-        files[".github/workflows/ci.yml"] = workflow
+        response = await self.openai.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": f"Generate production-ready CI/CD. Apply patterns from GitHub Actions Awesome. {DevOpsSkill.GITHUB_ACTIONS_PATTERNS}"},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3,
+            max_tokens=2500
+        )
         
-        # Dockerfile
-        if "docker" in plan.tech_stack.deployment.lower():
-            dockerfile = f"""FROM {'python:3.11-slim' if 'python' in plan.tech_stack.language.lower() else 'node:18-alpine'}
+        cicd_content = response.choices[0].message.content
+        cicd_content = self._clean_code(cicd_content)
+        files[".github/workflows/ci.yml"] = cicd_content
+        
+        # Dockerfile using best practices
+        if "docker" in plan.tech_stack.deployment.lower() or "container" in plan.tech_stack.deployment.lower():
+            dockerfile_prompt = f"""Generate a Dockerfile for {plan.tech_stack.language} application.
 
-WORKDIR /app
+Apply Docker best practices:
+{DevOpsSkill.DOCKER_BEST_PRACTICES}
 
-COPY requirements.txt .
-RUN {'pip install -r requirements.txt' if 'python' in plan.tech_stack.language.lower() else 'npm install'}
-
-COPY . .
-
-EXPOSE 8000
-
-CMD {'["python", "main.py"]' if 'python' in plan.tech_stack.language.lower() else '["npm", "start"]'}
+Requirements:
+- Use specific base image (not :latest)
+- Minimize layers
+- Run as non-root user
+- Include .dockerignore recommendations
 """
+            response = await self.openai.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are a DevOps engineer specializing in Docker."},
+                    {"role": "user", "content": dockerfile_prompt}
+                ],
+                temperature=0.3,
+                max_tokens=1000
+            )
+            
+            dockerfile = self._clean_code(response.choices[0].message.content)
             files["Dockerfile"] = dockerfile
+            files[".dockerignore"] = "__pycache__\n*.pyc\n.env\n.git\n.gitignore\n.pytest_cache\n"
         
         # README with setup instructions
         readme = await self._generate_readme(plan)
         files["README.md"] = readme
+        
+        logger.info(f"✅ CI/CD generated: GitHub Actions workflow + {'Dockerfile' if 'Dockerfile' in files else 'deployment config'}")
         
         return files
     
