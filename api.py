@@ -529,29 +529,13 @@ async def twilio_whatsapp_webhook(
 async def get_pending_tweets():
     """Get list of pending tweets awaiting user action."""
     from telegram_bot import telegram_bot
-    from whatsapp_handler import whatsapp_handler
     
     # Get Telegram pending
     telegram_pending = telegram_bot.get_pending_list()
     
-    # Get WhatsApp pending (legacy)
-    whatsapp_pending = [
-        {
-            "id": f"WA-{i+1:03d}",
-            "phone": phone,
-            "username": data["username"],
-            "score": data["rating"].get("score", 0),
-            "sent_at": data["sent_at"].isoformat(),
-            "status": data["status"],
-            "source": "whatsapp"
-        }
-        for i, (phone, data) in enumerate(whatsapp_handler.pending_tweets.items())
-    ]
-    
     return {
-        "pending_count": len(telegram_pending) + len(whatsapp_pending),
-        "telegram_pending": telegram_pending,
-        "whatsapp_pending": whatsapp_pending
+        "pending_count": len(telegram_pending),
+        "telegram_pending": telegram_pending
     }
 
 
