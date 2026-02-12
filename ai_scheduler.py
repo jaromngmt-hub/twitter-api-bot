@@ -162,9 +162,9 @@ class AIScheduler:
             
             # Send to Discord (with tiered routing if AI enabled)
             if self.enable_ai and rating:
-                # Skip low-quality tweets (score < 4)
-                if rating.score < 4:
-                    logger.info(f"Tweet from @{user.username} filtered (score: {rating.score}/10)")
+                # Skip useless tweets (score < 2) - only 0-1 are trash
+                if rating.score < 2:
+                    logger.info(f"Tweet from @{user.username} filtered as useless (score: {rating.score}/10)")
                     continue
                 
                 result = await discord.send_tweet(
