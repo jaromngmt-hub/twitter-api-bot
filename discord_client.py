@@ -19,7 +19,7 @@ class DiscordWebhookError(Exception):
 class DiscordClient:
     """Async client for Discord webhooks."""
     
-    MAX_TEXT_LENGTH = 4000  # Leave room for RT formatting
+    MAX_TEXT_LENGTH = 3900  # Discord limit is 4096, leave room for formatting
     AVATAR_URL = "https://abs.twimg.com/icons/apple-touch-icon-192x192.png"
     BOT_USERNAME = "Twitter Monitor"
     
@@ -62,21 +62,32 @@ class DiscordClient:
         return text[:self.MAX_TEXT_LENGTH - 3] + "..."
     
     def _format_tweet_text(self, tweet: Tweet) -> str:
-        """Format tweet text with full content, handle RTs properly."""
+        """Format tweet text with FULL content, handle RTs properly."""
         text = tweet.text
         
-        # Handle retweets - show full original text
+        # Handle retweets - extract and format properly
         if text.startswith("RT @"):
             # Format: "RT @username: original text"
-            # Make it clearer
             parts = text.split(": ", 1)
             if len(parts) == 2:
                 rt_header = parts[0]  # "RT @username"
                 original_text = parts[1]  # the actual tweet
-                text = f"**{rt_header}**\n\n{original_text}"
+                
+                # Format as quote-style for clarity
+                text = f"🔁 **{rt_header}**\n\n{original_text}"
         
-        # Truncate if still too long
-        return self._truncate_text(text)
+        # Check length - Discord embed limit is 4096
+        # If too long, truncate smartly with link to full tweet
+        if len(text) > self.MAX_TEXT_LENGTH:
+            # Truncate but keep more content
+            truncated = text[:self.MAX_TEXT_LENGTH - 50]
+            # Try to end at a word boundary
+            last_space = truncated.rfind(" ")
+            if last_space > self.MAX_TEXT_LENGTH - 100:
+                truncated = truncated[:last_space]
+            text = truncated + "\n\n... *(truncated - click link for full tweet)*"
+        
+        return text
     
     def _build_payload(self, username: str, tweet: Tweet) -> dict:
         """Build Discord webhook payload."""
@@ -86,13 +97,17 @@ class DiscordClient:
         # Get first media URL if available
         image_url = tweet.media_urls[0] if tweet.media_urls else None
         
+        # Build tweet URL
+        tweet_url = f"https://twitter.com/{username}/status/{tweet.id}"
+        
         embed = {
             "description": description,
             "color": 1942002,  # Twitter blue
             "timestamp": self._format_timestamp(tweet.created_at),
             "footer": {
                 "text": f"@{username} | {self._format_metrics(tweet)}"
-            }
+            },
+            "url": tweet_url  # Clicking embed goes to tweet
         }
         
         # Add image if exists
@@ -102,6 +117,7 @@ class DiscordClient:
         return {
             "username": f"@{username}",
             "avatar_url": f"https://unavatar.io/twitter/{username}",
+            "content": f"🔗 [View on Twitter]({tweet_url})",  # Direct link
             "embeds": [embed]
         }
     
