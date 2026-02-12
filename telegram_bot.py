@@ -38,18 +38,25 @@ class TelegramBot:
         if not self.enabled:
             return {"sent": False, "error": "Telegram not configured"}
         
-        # Truncate tweet if too long
-        display_text = tweet_text[:400] + "..." if len(tweet_text) > 400 else tweet_text
+        # Truncate and escape tweet text for Telegram MarkdownV2
+        display_text = tweet_text[:350] + "..." if len(tweet_text) > 350 else tweet_text
+        # Escape special MarkdownV2 characters
+        import re
+        escape_chars = r'_*[]()~`>#+-=|{}.!'
+        display_text = ''.join(f'\\{c}' if c in escape_chars else c for c in display_text)
+        reason_clean = ''.join(f'\\{c}' if c in escape_chars else c for c in reason[:100])
         
-        message = f"""🚨 *URGENT TWEET* {score}/10
+        message = f"""🚨 URGENT TWEET {score}/10
 
 👤 @{username}
 📊 Category: {category.upper()}
 
-💬 *Tweet:*
+💬 Tweet:
 {display_text}
 
-📝 *Why:* {reason[:150]}"""
+📝 Why: {reason_clean}
+
+Reply with buttons below ⬇️"""
 
         # Inline keyboard with action buttons
         keyboard = {
