@@ -160,23 +160,92 @@ class AIScheduler:
                     # Continue with default rating
                     rating = None
             
-            # Send to Discord (with tiered routing if AI enabled)
+            # Route tweets based on AI score
             if self.enable_ai and rating:
-                # Skip useless tweets (score < 2) - only 0-1 are trash
+                # 0-1: Filter completely (useless)
                 if rating.score < 2:
-                    logger.info(f"Tweet from @{user.username} filtered as useless (score: {rating.score}/10)")
+                    logger.info(f"🗑️ Tweet from @{user.username} filtered (score: {rating.score}/10)")
                     continue
                 
-                result = await discord.send_tweet(
-                    user.webhook_url,  # Fallback
-                    user.username,
-                    tweet,
-                    {"score": rating.score, "category": rating.category, 
-                     "summary": rating.summary, "action": rating.action, 
-                     "reason": rating.reason}
-                )
+                # 2-7: Send to Discord (categorized by topic: AI, CRYPTO, etc.)
+                elif rating.score < 8:
+                    result = await discord.send_tweet(
+                        user.username,
+                        tweet,
+                        {"score": rating.score, "category": rating.category, 
+                         "summary": rating.summary, "action": rating.action, 
+                         "reason": rating.reason}
+                    )
+                    
+                    if result["sent"]:
+                        db.record_sent_tweet(
+                            tweet_id=tweet.id,
+                            username=user.username,
+                            channel_id=user.channel_id,
+                            text=tweet.text,
+                            created_at=tweet.created_at
+                        )
+                        logger.info(f"📨 Sent to Discord: {rating.category} tweet (score {rating.score}) from @{user.username}")
+                
+                # 8-10: WhatsApp for user decision (ALL categories go here)
+                else:
+                    logger.info(f"🚨 HIGH VALUE tweet from @{user.username} (score: {rating.score}/10) → WhatsApp")
+                    
+                    # Send WhatsApp notification for user to decide
+                    if urgent_notifier:
+                        try:
+                            should_send = await rate_limiter.should_send_notification(
+                                user.username, tweet.id
+                            )
+                            
+                            if should_send:
+                                notify_result = await urgent_notifier.send_urgent_notification(
+                                    user.username,
+                                    tweet,
+                                    {
+                                        "score": rating.score,
+                                        "category": rating.category,
+                                        "summary": rating.summary,
+                                        "reason": rating.reason
+                                    }
+                                )
+                                
+                                if notify_result["sent"]:
+                                    logger.info(f"📱 WhatsApp sent for @{user.username} (score: {rating.score})")
+                                    await rate_limiter.mark_notification_sent()
+                                    
+                                    # Store for user reply (BUILD/INTERESTING/NOTHING)
+                                    whatsapp_handler.store_pending_tweet(
+                                        phone=settings.YOUR_PHONE_NUMBER,
+                                        username=user.username,
+                                        tweet=tweet,
+                                        rating={
+                                            "score": rating.score,
+                                            "category": rating.category,
+                                            "summary": rating.summary,
+                                            "reason": rating.reason
+                                        }
+                                    )
+                                else:
+                                    logger.warning(f"WhatsApp failed: {notify_result}")
+                            else:
+                                # Queue for later
+                                position = await rate_limiter.queue_tweet(
+                                    username=user.username,
+                                    tweet_id=tweet.id,
+                                    text=tweet.text,
+                                    score=rating.score,
+                                    category=rating.category,
+                                    summary=rating.summary,
+                                    reason=rating.reason
+                                )
+                                logger.info(f"⏳ Queued for WhatsApp: @{user.username} (position {position})")
+                                
+                        except Exception as e:
+                            logger.error(f"WhatsApp error: {e}")
+            
             else:
-                # Legacy mode - send to default webhook
+                # Legacy mode - no AI, send all to default webhook
                 result = await discord.send_tweet(
                     user.webhook_url,
                     user.username,
@@ -184,84 +253,16 @@ class AIScheduler:
                     {"score": 5, "category": "legacy", "summary": tweet.text[:100],
                      "action": "send", "reason": "AI disabled"}
                 )
-            
-            if result["sent"]:
-                db.record_sent_tweet(
-                    tweet_id=tweet.id,
-                    username=user.username,
-                    channel_id=user.channel_id,
-                    text=tweet.text,
-                    created_at=tweet.created_at
-                )
-                logger.info(
-                    f"Sent tier {result['tier']} tweet {tweet.id} from @{user.username}"
-                )
                 
-                # 🚨 URGENT NOTIFICATION for score 9-10 (with rate limiting)
-                if urgent_notifier and rating and rating.score >= 9:
-                    try:
-                        # Check rate limit
-                        should_send = await rate_limiter.should_send_notification(
-                            user.username, tweet.id
-                        )
-                        
-                        if should_send:
-                            # Send notification immediately
-                            notify_result = await urgent_notifier.send_urgent_notification(
-                                user.username,
-                                tweet,
-                                {
-                                    "score": rating.score,
-                                    "category": rating.category,
-                                    "summary": rating.summary,
-                                    "reason": rating.reason
-                                }
-                            )
-                            
-                            if notify_result["sent"]:
-                                logger.info(f"🚨 URGENT notification sent for @{user.username} (score: {rating.score})")
-                                await rate_limiter.mark_notification_sent()
-                                
-                                # Store pending tweet for user reply
-                                whatsapp_handler.store_pending_tweet(
-                                    phone=settings.YOUR_PHONE_NUMBER,
-                                    username=user.username,
-                                    tweet=tweet,
-                                    rating={
-                                        "score": rating.score,
-                                        "category": rating.category,
-                                        "summary": rating.summary,
-                                        "reason": rating.reason
-                                    }
-                                )
-                            else:
-                                logger.warning(f"Failed to send urgent notification: {notify_result}")
-                        else:
-                            # Queue for later batch notification
-                            position = await rate_limiter.queue_tweet(
-                                username=user.username,
-                                tweet_id=tweet.id,
-                                text=tweet.text,
-                                score=rating.score,
-                                category=rating.category,
-                                summary=rating.summary,
-                                reason=rating.reason
-                            )
-                            
-                            if position > 0:
-                                logger.info(
-                                    f"⏳ Queued urgent tweet from @{user.username} "
-                                    f"(position {position}, will batch notify later)"
-                                )
-                            
-                    except Exception as e:
-                        logger.error(f"Urgent notification error: {e}")
-                
-            else:
-                if "filtered" in result.get("reason", "").lower():
-                    logger.info(f"Filtered low-value tweet from @{user.username}")
-                else:
-                    logger.error(f"Failed to send tweet {tweet.id}: {result.get('error')}")
+                if result["sent"]:
+                    db.record_sent_tweet(
+                        tweet_id=tweet.id,
+                        username=user.username,
+                        channel_id=user.channel_id,
+                        text=tweet.text,
+                        created_at=tweet.created_at
+                    )
+                    logger.info(f"📨 Legacy mode: Sent tweet from @{user.username}")
             
             # Rate limit protection
             await asyncio.sleep(1)
