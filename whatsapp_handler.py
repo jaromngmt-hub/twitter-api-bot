@@ -4,7 +4,7 @@
 User receives urgent tweet via WhatsApp and can reply:
 - "INTERESTING" or "1" → Send to Discord INTERESTING channel
 - "NOTHING" or "NO" or "2" → Mark as filtered, log for learning
-- "BUILD" or "3" → Trigger Build Agent to create project
+- "BUILD" or "3" → Trigger Build Agent (Kimi + Qwen) to create project
 """
 
 import asyncio
@@ -18,7 +18,8 @@ from loguru import logger
 from config import settings
 from database import db
 from discord_client import DiscordClient
-from build_agent import build_agent
+from build_agent_enhanced import enhanced_build_agent
+from urgent_notifier import UrgentNotifier
 from models import Tweet
 
 
@@ -179,32 +180,102 @@ Please respond with:
         tweet: Tweet, 
         rating: dict
     ) -> str:
-        """Trigger Build Agent to create project from tweet."""
-        # First, acknowledge receipt
-        ack_message = "🔨 Analyzing tweet for project idea..."
+        """
+        Trigger Enhanced Build Agent (Kimi + Qwen) to create project from tweet.
         
-        # Analyze tweet for project potential
-        plan = await build_agent.analyze_tweet_for_project(tweet, username)
+        Pipeline:
+        1. 🧠 Kimi K2 - Analyze & Plan
+        2. 💻 Qwen Coder - Build & Implement
+        3. 🔨 GitHub - Create private repo
+        """
         
-        if not plan:
-            return "❌ Couldn't identify a buildable project in this tweet. Try another one?"
-        
-        # Send plan for user approval
-        await build_agent.send_plan_for_approval(plan, username)
-        
-        # Log the action
-        db.log_user_action(
-            phone=phone,
-            action="BUILD_INITIATED",
-            username=username,
-            tweet_id=tweet.id,
-            project_name=plan.name
+        # Send initial acknowledgment via WhatsApp
+        notifier = UrgentNotifier()
+        await notifier._send_whatsapp_raw(
+            to=settings.YOUR_PHONE_NUMBER,
+            message=f"🔨 *BUILD STARTED*\n\nTweet from @{username}:\n{tweet.text[:200]}...\n\n🧠 Kimi K2: Analyzing...\n💻 Qwen Coder: Ready to build\n\nThis takes ~2-3 minutes. I'll update you on progress!"
         )
         
-        # Remove from pending (Build Agent takes over now)
-        del self.pending_tweets[phone]
-        
-        return ack_message
+        try:
+            # Run full build pipeline with Kimi + Qwen
+            logger.info(f"Starting BUILD for @{username} with Kimi+Qwen")
+            
+            result = await enhanced_build_agent.build_project(
+                tweet_text=tweet.text,
+                username=username
+            )
+            
+            if result["success"]:
+                # Build completed successfully!
+                project_name = result["project_name"]
+                github_url = f"https://github.com/{settings.GITHUB_USERNAME}/{project_name}"
+                
+                # Send success message with repo link
+                success_msg = f"""✅ *BUILD COMPLETE!*
+
+📁 Project: *{project_name}*
+🧠 Analyzed by: Kimi K2
+💻 Built by: Qwen Coder
+📊 Stats:
+• {result['stats']['files_generated']} files
+• {result['stats']['tests_generated']} tests
+• Code quality: {result['stats']['review_score']}/10
+• Est. time: {result['stats']['estimated_hours']} hours
+
+🔗 *GitHub Repo (Private):*
+{github_url}
+
+🚀 Next steps:
+{chr(10).join(result['next_steps'][:3])}
+
+Built with 🤖 Kimi + Qwen (40x cheaper than GPT-4o!)"""
+                
+                await notifier._send_whatsapp_raw(
+                    to=settings.YOUR_PHONE_NUMBER,
+                    message=success_msg
+                )
+                
+                # Log success
+                db.log_user_action(
+                    phone=phone,
+                    action="BUILD_COMPLETED",
+                    username=username,
+                    tweet_id=tweet.id,
+                    project_name=project_name,
+                    reason=f"Kimi+Qwen build successful. Score: {result['stats']['review_score']}/10"
+                )
+                
+            else:
+                # Build failed
+                error_msg = f"""❌ *BUILD FAILED*
+
+Error: {result.get('error', 'Unknown error')}
+
+The tweet might not contain a clear project idea, or there was a technical issue.
+
+Try replying BUILD to a different tweet!"""
+                
+                await notifier._send_whatsapp_raw(
+                    to=settings.YOUR_PHONE_NUMBER,
+                    message=error_msg
+                )
+            
+            # Remove from pending
+            del self.pending_tweets[phone]
+            
+            return "Build process completed! Check WhatsApp for details."
+            
+        except Exception as e:
+            logger.error(f"Build failed: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            
+            await notifier._send_whatsapp_raw(
+                to=settings.YOUR_PHONE_NUMBER,
+                message=f"❌ *BUILD ERROR*\n\nSomething went wrong:\n{str(e)[:200]}\n\nPlease try again with a different tweet."
+            )
+            
+            return f"❌ Build failed: {str(e)[:100]}"
     
     def get_pending_count(self) -> int:
         """Get number of pending tweets awaiting user response."""
