@@ -60,8 +60,22 @@ class StatusResponse(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifespan."""
+    global scheduler
     # Startup
     logger.info("API starting up...")
+    
+    # Auto-start scheduler on boot (Render free tier fix)
+    try:
+        from scheduler import Scheduler
+        if not scheduler:
+            scheduler = Scheduler(interval=settings.CHECK_INTERVAL_SECONDS)
+            # Run scheduler in background
+            import asyncio
+            asyncio.create_task(scheduler.run())
+            logger.info(f"🚀 Scheduler auto-started (interval: {settings.CHECK_INTERVAL_SECONDS}s)")
+    except Exception as e:
+        logger.error(f"Failed to auto-start scheduler: {e}")
+    
     yield
     # Shutdown
     if scheduler and scheduler.running:
