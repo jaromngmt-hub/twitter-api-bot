@@ -487,98 +487,75 @@ async def get_available_models():
 @app.post("/api/test/build-calendar")
 async def test_build_calendar():
     """
-    TEST: Trigger BUILD with a calendar app tweet.
-    Sends WhatsApp message and runs full Kimi+Qwen pipeline.
+    TEST: Send fake "urgent tweet" about calendar app to your WhatsApp.
+    
+    YOU reply with "BUILD" to trigger the full Kimi+Qwen pipeline!
     """
-    from build_agent_enhanced import enhanced_build_agent
     from urgent_notifier import UrgentNotifier
+    from whatsapp_handler import whatsapp_handler
     from config import settings
+    from models import Tweet
+    from datetime import datetime
     
-    # Test tweet about building a calendar
-    test_tweet = "Build a smart calendar app that automatically schedules my tasks based on priority and energy levels throughout the day. It should sync with Google Calendar and send notifications when I'm about to miss a deadline. Dark mode by default."
+    # Create fake tweet about calendar app
+    test_tweet = Tweet(
+        id="999888777666555444",
+        text="🚀 IDEA: Build a smart calendar app that automatically schedules my tasks based on priority and energy levels throughout the day. It should sync with Google Calendar and send notifications when I'm about to miss a deadline. Dark mode by default.",
+        created_at=datetime.now(),
+        author_id="123456789",
+        metrics={"likes": 4200, "retweets": 890, "replies": 156}
+    )
     
-    # First send WhatsApp "urgent tweet" style message
+    # Fake high rating (9/10)
+    test_rating = {
+        "score": 9,
+        "category": "productivity",
+        "summary": "Smart calendar with energy-based scheduling - great productivity tool idea",
+        "reason": "Well-defined scope, clear features, solves real problem. Buildable as MVP."
+    }
+    
+    # Store in pending queue (like real urgent tweet)
+    whatsapp_handler.store_pending_tweet(
+        phone=settings.YOUR_PHONE_NUMBER,
+        username="productivity_guru",
+        tweet=test_tweet,
+        rating=test_rating
+    )
+    
+    # Send WhatsApp message with options
     notifier = UrgentNotifier()
     
-    welcome_msg = """🧪 *TEST BUILD - Calendar App*
+    test_msg = """🧪 *TEST - Calendar App Idea* 🧪
 
-Simulating urgent tweet from @productivity_guru:
+*From:* @productivity_guru
+*Score:* 9/10 ⭐
 
+*Content:*
 "Build a smart calendar app that automatically schedules my tasks based on priority and energy levels throughout the day. It should sync with Google Calendar and send notifications when I'm about to miss a deadline. Dark mode by default."
 
 ━━━━━━━━━━━━━━━━━━━━━━
 *Reply with:*
-3️⃣ *BUILD* - Create this project
+1️⃣ *INTERESTING* → Share to Discord
+2️⃣ *NOTHING* → Skip this tweet
+3️⃣ *BUILD* → 🚀 Create project with Kimi+Qwen!
 ━━━━━━━━━━━━━━━━━━━━━━
 
-(This is a test - I'll auto-reply BUILD in 5 seconds...)"""
+(This is a test - reply with BUILD to see Kimi K2 + Qwen Coder in action!)"""
     
     try:
         await notifier._send_whatsapp_raw(
             to=settings.YOUR_PHONE_NUMBER,
-            message=welcome_msg
+            message=test_msg
         )
         
-        # Wait a moment then auto-trigger BUILD
-        import asyncio
-        await asyncio.sleep(5)
+        return {
+            "success": True,
+            "message": "Test message sent! Check WhatsApp and reply with BUILD to trigger the pipeline.",
+            "instructions": "Reply 'BUILD' to your WhatsApp to start the Kimi+Qwen build process!"
+        }
         
-        # Send "BUILDING..." message
-        await notifier._send_whatsapp_raw(
-            to=settings.YOUR_PHONE_NUMBER,
-            message="🔨 *BUILD STARTED*\n\n🧠 Kimi K2: Analyzing calendar app requirements...\n💻 Qwen Coder: Ready to build\n\nThis takes ~2-3 minutes!"
-        )
-        
-        # Run full build pipeline
-        logger.info("🧪 TEST BUILD: Starting calendar app build with Kimi+Qwen")
-        result = await enhanced_build_agent.build_project(test_tweet, "productivity_guru")
-        
-        if result["success"]:
-            project_name = result["project_name"]
-            github_url = f"https://github.com/{settings.GITHUB_USERNAME}/{project_name}"
-            
-            success_msg = f"""✅ *TEST BUILD COMPLETE!*
-
-📁 Project: *{project_name}*
-🧠 Analyzed by: Kimi K2
-💻 Built by: Qwen Coder
-📊 Stats:
-• {result['stats']['files_generated']} files
-• {result['stats']['tests_generated']} tests  
-• Code quality: {result['stats']['review_score']}/10
-• Est. time: {result['stats']['estimated_hours']} hours
-
-🔗 *GitHub Repo (Private):*
-{github_url}
-
-💰 *Cost Savings:*
-Used Kimi ($0.50/M) + Qwen ($0.07/M)
-vs GPT-4o ($2.50/M) = ~90% cheaper!
-
-Built with 🤖 Kimi + Qwen"""
-            
-            await notifier._send_whatsapp_raw(
-                to=settings.YOUR_PHONE_NUMBER,
-                message=success_msg
-            )
-            
-            return {
-                "success": True,
-                "message": "Test build completed! Check WhatsApp.",
-                "project": result
-            }
-        else:
-            error_msg = f"❌ *BUILD FAILED*\n\nError: {result.get('error', 'Unknown')}\n\nCheck logs for details."
-            await notifier._send_whatsapp_raw(
-                to=settings.YOUR_PHONE_NUMBER,
-                message=error_msg
-            )
-            return {"success": False, "error": result.get("error")}
-            
     except Exception as e:
-        logger.error(f"Test build failed: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
+        logger.error(f"Failed to send test message: {e}")
         return {"success": False, "error": str(e)}
 
 
