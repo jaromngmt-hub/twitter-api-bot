@@ -40,6 +40,8 @@ from build_skills import (
     TDDSkill,
     CodeReviewSkill,
     DevOpsSkill,
+    VercelAISkill,
+    VERCEL_AI_TEMPLATES,
 )
 
 
@@ -201,12 +203,23 @@ class EnhancedBuildAgent:
     
     async def create_architecture_plan(self, requirements: ProjectRequirements) -> ProjectPlan:
         """
-        Stage 2: PLAN using System Design Primer patterns.
+        Stage 2: PLAN using System Design Primer patterns + Vercel AI SDK for AI projects.
         
-        Skill: SystemArchitectureSkill
-        Source: donnemartin/system-design-primer (270k stars), Awesome Scalability
+        Skills: 
+        - SystemArchitectureSkill (System Design Primer)
+        - VercelAISkill (Vercel AI SDK - 10k stars)
         """
-        logger.info(f"Stage 2/6: PLAN - Designing architecture using System Design Primer patterns")
+        logger.info(f"Stage 2/6: PLAN - Designing architecture")
+        
+        # Check if this is an AI project
+        is_ai_project = VercelAISkill.should_use_ai_sdk(
+            requirements.description,
+            requirements.core_features
+        )
+        
+        if is_ai_project:
+            logger.info(f"🤖 AI project detected! Using Vercel AI SDK patterns")
+            return await self._create_ai_architecture_plan(requirements)
         
         prompt = SystemArchitectureSkill.design_architecture_prompt({
             "name": requirements.name,
@@ -234,6 +247,93 @@ class EnhancedBuildAgent:
         logger.info(f"✅ Architecture planned: {data.get('architecture_pattern')} with {len(components)} components")
         
         return ProjectPlan(
+            requirements=requirements,
+            tech_stack=tech_stack,
+            components=components,
+            api_endpoints=data["api_endpoints"],
+            data_models=data["data_models"],
+            file_structure=data["file_structure"],
+            estimated_hours=data["estimated_hours"],
+            risks=data.get("risks", [])
+        )
+    
+    async def _create_ai_architecture_plan(self, requirements: ProjectRequirements) -> ProjectPlan:
+        """
+        Create architecture plan specifically for AI projects using Vercel AI SDK.
+        
+        Skill: VercelAISkill
+        Source: vercel/ai (10k+ stars)
+        """
+        # Determine project type
+        features_text = ' '.join(requirements.core_features).lower()
+        
+        if 'chat' in features_text or 'conversation' in features_text:
+            project_type = "chat_app"
+        elif 'rag' in features_text or 'knowledge' in features_text or 'search' in features_text:
+            project_type = "rag_knowledge_base"
+        elif 'agent' in features_text or 'automation' in features_text or 'tool' in features_text:
+            project_type = "ai_agent"
+        else:
+            project_type = "chat_app"  # Default
+        
+        stack = VercelAISkill.get_recommended_stack(project_type)
+        
+        prompt = f"""Design an AI-powered application using Vercel AI SDK patterns.
+
+Project: {requirements.name}
+Description: {requirements.description}
+Features: {', '.join(requirements.core_features)}
+Project Type: {project_type}
+
+Recommended Stack from Vercel AI SDK:
+{json.dumps(stack, indent=2)}
+
+Vercel AI SDK Patterns to apply:
+{VercelAISkill.STREAMING_PATTERNS}
+
+{VercelAISkill.TOOL_CALLING_PATTERNS}
+
+{VercelAISkill.AGENT_PATTERNS if project_type == "ai_agent" else VercelAISkill.RAG_PATTERNS if project_type == "rag_knowledge_base" else ""}
+
+Design:
+1. ARCHITECTURE: Next.js 14 with App Router, API routes for AI
+2. AI SDK SETUP: Provider (OpenAI/Anthropic), streaming, tools
+3. COMPONENTS: Chat UI, message handling, tool visualization
+4. STATE: Message history, conversation context
+5. API ROUTES: /api/chat (streaming), /api/tools (executions)
+
+Respond in JSON with tech_stack, components, api_endpoints, etc."""
+
+        response = await self.openai.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are an AI engineer specializing in Vercel AI SDK. Design modern AI applications with streaming, tool calling, and great UX."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.4,
+            max_tokens=2500
+        )
+        
+        content = response.choices[0].message.content
+        content = self._extract_json(content)
+        data = json.loads(content)
+        
+        # Add Vercel AI SDK to tech stack
+        tech_stack = TechStack(**data["tech_stack"])
+        components = [Component(**c) for c in data["components"]]
+        
+        logger.info(f"✅ AI Architecture planned: {project_type} with Vercel AI SDK ({len(components)} components)")
+        
+        return ProjectPlan(
+            requirements=requirements,
+            tech_stack=tech_stack,
+            components=components,
+            api_endpoints=data["api_endpoints"],
+            data_models=data["data_models"],
+            file_structure=data["file_structure"],
+            estimated_hours=data["estimated_hours"],
+            risks=data.get("risks", [])
+        )
             requirements=requirements,
             tech_stack=tech_stack,
             components=components,
@@ -444,25 +544,214 @@ Only output the implementation code."""
     # STAGE 6: DEPLOY - CI/CD Pipeline
     # ═══════════════════════════════════════════════════════════════
     
+    async def generate_ai_sdk_files(self, plan: ProjectPlan) -> Dict[str, str]:
+        """
+        Generate Vercel AI SDK specific files for AI projects.
+        
+        Skill: VercelAISkill
+        Source: vercel/ai (10k stars)
+        """
+        files = {}
+        
+        # Check if this is an AI project
+        is_ai = 'ai' in plan.tech_stack.framework.lower() or 'vercel' in plan.tech_stack.deployment.lower()
+        if not is_ai:
+            return files
+        
+        logger.info(f"🤖 Generating Vercel AI SDK files")
+        
+        # 1. AI API Route (streaming)
+        files["app/api/chat/route.ts"] = '''import { openai } from '@ai-sdk/openai';
+import { streamText } from 'ai';
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  
+  const result = streamText({
+    model: openai('gpt-4o'),
+    messages,
+    onChunk: async ({ chunk }) => {
+      // Optional: Log or process chunks
+    },
+  });
+  
+  return result.toDataStreamResponse();
+}
+'''
+        
+        # 2. Chat Component
+        files["components/chat.tsx"] = ''''use client';
+
+import { useChat } from 'ai/react';
+import { Send } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
+
+export function Chat() {
+  const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat();
+  
+  return (
+    <div className="flex flex-col h-[600px] border rounded-lg">
+      <ScrollArea className="flex-1 p-4">
+        {messages.length === 0 ? (
+          <div className="text-center text-gray-500 mt-10">
+            <p className="text-lg font-medium">Welcome! 👋</p>
+            <p className="text-sm">Start a conversation...</p>
+          </div>
+        ) : (
+          messages.map((m) => (
+            <div
+              key={m.id}
+              className={`mb-4 flex ${
+                m.role === 'user' ? 'justify-end' : 'justify-start'
+              }`}
+            >
+              <div
+                className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                  m.role === 'user'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-900'
+                }`}
+              >
+                <p className="text-sm">{m.content}</p>
+              </div>
+            </div>
+          ))
+        )}
+        {isLoading && (
+          <div className="flex justify-start mb-4">
+            <div className="bg-gray-100 rounded-lg px-4 py-2">
+              <div className="flex space-x-2">
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-100" />
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-200" />
+              </div>
+            </div>
+          </div>
+        )}
+      </ScrollArea>
+      
+      <form onSubmit={handleSubmit} className="p-4 border-t flex gap-2">
+        <Input
+          value={input}
+          onChange={handleInputChange}
+          placeholder="Type your message..."
+          disabled={isLoading}
+          className="flex-1"
+        />
+        <Button type="submit" disabled={isLoading || !input.trim()}>
+          <Send className="w-4 h-4" />
+        </Button>
+      </form>
+    </div>
+  );
+}
+'''
+        
+        # 3. Environment variables template
+        files[".env.example"] = '''# Vercel AI SDK
+OPENAI_API_KEY=sk-...
+# Or use Anthropic
+# ANTHROPIC_API_KEY=sk-ant-...
+
+# Optional: Other providers
+# GROQ_API_KEY=...
+# MISTRAL_API_KEY=...
+'''
+        
+        # 4. Vercel config
+        files["vercel.json"] = '''{
+  "functions": {
+    "app/api/**/*.ts": {
+      "maxDuration": 30
+    }
+  }
+}
+'''
+        
+        logger.info(f"✅ Generated {len(files)} Vercel AI SDK files")
+        return files
+    
     async def generate_cicd_files(self, plan: ProjectPlan) -> Dict[str, str]:
         """
-        Stage 6: DEPLOY using GitHub Actions & Docker best practices.
+        Stage 6: DEPLOY using GitHub Actions & Docker/Vercel best practices.
         
-        Skill: DevOpsSkill
-        Source: Awesome GitHub Actions (30k stars), Docker Best Practices (30k stars)
+        Skill: DevOpsSkill + VercelAISkill
+        Source: Awesome GitHub Actions (30k stars), Vercel deployment patterns
         """
-        logger.info(f"Stage 6/6: DEPLOY - Generating CI/CD using GitHub Actions best practices")
+        logger.info(f"Stage 6/6: DEPLOY - Generating CI/CD")
+        
+        # Check if Vercel deployment
+        is_vercel = 'vercel' in plan.tech_stack.deployment.lower()
         
         files = {}
         
-        prompt = DevOpsSkill.generate_cicd_prompt(
-            {
-                "language": plan.tech_stack.language,
-                "framework": plan.tech_stack.framework,
-                "testing": plan.tech_stack.testing
-            },
-            plan.tech_stack.deployment
-        )
+        # For Vercel deployments, use Vercel-specific workflow
+        if is_vercel:
+            workflow = '''name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Lint
+        run: npm run lint
+      
+      - name: Type check
+        run: npm run type-check
+      
+      - name: Test
+        run: npm test
+      
+      - name: Build
+        run: npm run build
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Deploy to Vercel
+        uses: vercel/action-deploy@v1
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+'''
+            files[".github/workflows/ci.yml"] = workflow
+            
+        else:
+            # Standard GitHub Actions for other platforms
+            prompt = DevOpsSkill.generate_cicd_prompt(
+                {
+                    "language": plan.tech_stack.language,
+                    "framework": plan.tech_stack.framework,
+                    "testing": plan.tech_stack.testing
+                },
+                plan.tech_stack.deployment
+            )
 
         response = await self.openai.chat.completions.create(
             model="gpt-4o",
@@ -643,6 +932,154 @@ See [API_SPEC.md](API_SPEC.md) for API documentation.
 Built with 🤖 Enhanced Build Agent
 """
         return readme
+
+
+    # ═══════════════════════════════════════════════════════════════
+    # MAIN BUILD ORCHESTRATION
+    # ═══════════════════════════════════════════════════════════════
+    
+    async def build_project(self, tweet_text: str, username: str) -> Dict[str, Any]:
+        """
+        Execute full 6-stage build pipeline.
+        
+        Returns build result with repo URL or error.
+        """
+        logger.info(f"🏗️ Starting full build pipeline for @{username}")
+        logger.info(f"Tweet: {tweet_text[:100]}...")
+        
+        build_log = []
+        
+        # Stage 1: ANALYZE
+        logger.info("\n" + "="*60)
+        logger.info("STAGE 1/6: ANALYZE")
+        logger.info("="*60)
+        requirements = await self.analyze_tweet(tweet_text, username)
+        if not requirements:
+            return {"success": False, "error": "Could not extract buildable requirements from tweet"}
+        build_log.append(f"✅ Analyzed: {requirements.name}")
+        
+        # Stage 2: PLAN
+        logger.info("\n" + "="*60)
+        logger.info("STAGE 2/6: PLAN")
+        logger.info("="*60)
+        plan = await self.create_architecture_plan(requirements)
+        build_log.append(f"✅ Planned: {plan.tech_stack.language} + {plan.tech_stack.framework}")
+        
+        # Stage 3: DESIGN
+        logger.info("\n" + "="*60)
+        logger.info("STAGE 3/6: DESIGN")
+        logger.info("="*60)
+        docs = await self.create_design_docs(plan)
+        build_log.append(f"✅ Designed: {len(docs)} documentation files")
+        
+        # Stage 4: IMPLEMENT
+        logger.info("\n" + "="*60)
+        logger.info("STAGE 4/6: IMPLEMENT")
+        logger.info("="*60)
+        all_files = []
+        for component in plan.components[:3]:  # Limit to 3 components for speed
+            files = await self.generate_code(plan, component)
+            all_files.extend(files)
+        build_log.append(f"✅ Implemented: {len(all_files)} files with tests")
+        
+        # Stage 5: REVIEW
+        logger.info("\n" + "="*60)
+        logger.info("STAGE 5/6: REVIEW")
+        logger.info("="*60)
+        review = await self.review_code(all_files, plan)
+        build_log.append(f"✅ Reviewed: Score {review.score}/10, Passed: {review.passed}")
+        
+        # Stage 6: DEPLOY
+        logger.info("\n" + "="*60)
+        logger.info("STAGE 6/6: DEPLOY")
+        logger.info("="*60)
+        cicd_files = await self.generate_cicd_files(plan)
+        ai_sdk_files = await self.generate_ai_sdk_files(plan)
+        build_log.append(f"✅ Deploy config: {len(cicd_files) + len(ai_sdk_files)} CI/CD files")
+        
+        # Create local project structure
+        project_path = await self._create_local_project(
+            plan, all_files, docs, cicd_files, ai_sdk_files
+        )
+        
+        logger.info("\n" + "="*60)
+        logger.info("BUILD COMPLETE!")
+        logger.info("="*60)
+        
+        return {
+            "success": True,
+            "project_name": requirements.name,
+            "project_path": project_path,
+            "tech_stack": {
+                "language": plan.tech_stack.language,
+                "framework": plan.tech_stack.framework,
+                "deployment": plan.tech_stack.deployment
+            },
+            "stats": {
+                "files_generated": len(all_files),
+                "tests_generated": sum(1 for f in all_files if f.tests),
+                "docs_generated": len(docs),
+                "review_score": review.score,
+                "estimated_hours": plan.estimated_hours
+            },
+            "build_log": build_log,
+            "next_steps": [
+                f"cd {project_path}",
+                "git init && git add .",
+                "git commit -m 'Initial commit'",
+                f"gh repo create {requirements.name} --public --source=. --push" if self.github_token else "Create GitHub repo manually",
+                "Deploy to " + plan.tech_stack.deployment
+            ]
+        }
+    
+    async def _create_local_project(
+        self,
+        plan: ProjectPlan,
+        code_files: List[CodeFile],
+        docs: Dict[str, str],
+        cicd_files: Dict[str, str],
+        ai_sdk_files: Dict[str, str]
+    ) -> str:
+        """Create local project directory with all files."""
+        import os
+        
+        project_path = os.path.join(self.projects_dir, plan.requirements.name)
+        os.makedirs(project_path, exist_ok=True)
+        
+        # Write code files
+        for file in code_files:
+            file_path = os.path.join(project_path, file.path)
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, 'w') as f:
+                f.write(file.content)
+            # Write tests if present
+            if file.tests:
+                test_path = os.path.join(project_path, "tests", f"test_{os.path.basename(file.path)}")
+                os.makedirs(os.path.dirname(test_path), exist_ok=True)
+                with open(test_path, 'w') as f:
+                    f.write(file.tests)
+        
+        # Write docs
+        for name, content in docs.items():
+            with open(os.path.join(project_path, name), 'w') as f:
+                f.write(content)
+        
+        # Write CI/CD files
+        for name, content in cicd_files.items():
+            file_path = os.path.join(project_path, name)
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, 'w') as f:
+                f.write(content)
+        
+        # Write AI SDK files (Vercel projects)
+        for name, content in ai_sdk_files.items():
+            file_path = os.path.join(project_path, name)
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, 'w') as f:
+                f.write(content)
+        
+        logger.info(f"📁 Project created at: {project_path}")
+        return project_path
 
 
 # Singleton

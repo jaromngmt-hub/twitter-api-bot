@@ -7,6 +7,9 @@ These define best practices for software engineering.
 
 from typing import Dict, List
 
+# Import Vercel AI SDK skill
+from vercel_ai_skills import VercelAISkill, VERCEL_AI_TEMPLATES
+
 
 class RequirementsEngineeringSkill:
     """
