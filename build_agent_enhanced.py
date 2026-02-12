@@ -32,6 +32,7 @@ import httpx
 from loguru import logger
 from openai import AsyncOpenAI
 
+from ai_router import ai_router
 from config import settings
 from build_skills import (
     RequirementsEngineeringSkill,

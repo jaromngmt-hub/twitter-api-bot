@@ -73,6 +73,11 @@ class Settings:
     GITHUB_TOKEN: str = os.getenv("GITHUB_TOKEN", "")
     GITHUB_USERNAME: str = os.getenv("GITHUB_USERNAME", "")
     
+    # AI Model Selection (OpenRouter - access to ALL models!)
+    OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
+    # Default model for code generation: "qwen-coder" (cheap + excellent) or "claude-sonnet" (best quality)
+    CODE_MODEL: str = os.getenv("CODE_MODEL", "qwen-coder")
+    
     # TwitterAPI
     TWITTERAPI_BASE_URL: str = "https://api.twitterapi.io"
     TWITTERAPI_TIMEOUT: int = 30
