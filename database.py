@@ -103,6 +103,23 @@ class Database:
                 )
             """)
             
+            # Create tweet_ratings table (AI analysis)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS tweet_ratings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tweet_id TEXT NOT NULL,
+                    username TEXT NOT NULL,
+                    channel_id INTEGER NOT NULL,
+                    score INTEGER NOT NULL, -- 1-10
+                    category TEXT, -- bot, alpha, news, community, fluff
+                    summary TEXT,
+                    action TEXT, -- send, filter, highlight, follow_user, build_bot
+                    reason TEXT,
+                    rated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (channel_id) REFERENCES channels(id)
+                )
+            """)
+            
             # Create indexes
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_users_channel 
@@ -111,6 +128,10 @@ class Database:
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_sent_tweets_lookup 
                 ON sent_tweets(tweet_id, channel_id)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ratings_lookup 
+                ON tweet_ratings(tweet_id, channel_id)
             """)
             
             logger.info("Database initialized successfully")
@@ -382,3 +403,59 @@ class Database:
 
 # Global database instance
 db = Database()
+
+
+# AI Rating operations (new)
+def record_tweet_rating(
+    self,
+    tweet_id: str,
+    username: str,
+    channel_id: int,
+    score: int,
+    category: str,
+    summary: str,
+    action: str,
+    reason: str
+) -> int:
+    """Record AI rating for a tweet."""
+    def _record():
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """INSERT INTO tweet_ratings 
+                   (tweet_id, username, channel_id, score, category, summary, action, reason)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (tweet_id, username, channel_id, score, category, summary, action, reason)
+            )
+            return cursor.lastrowid
+    
+    return self._execute_with_retry(_record)
+
+
+def get_rating_stats(self, days: int = 7) -> dict:
+    """Get AI rating statistics for last N days."""
+    def _get():
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT 
+                    COUNT(*) as total,
+                    AVG(score) as avg_score,
+                    COUNT(CASE WHEN score >= 7 THEN 1 END) as high_value,
+                    COUNT(CASE WHEN score <= 3 THEN 1 END) as filtered,
+                    category
+                FROM tweet_ratings
+                WHERE rated_at >= datetime('now', '-{} days')
+                GROUP BY category
+            """.format(days))
+            
+            rows = cursor.fetchall()
+            return {
+                "total": sum(r["total"] for r in rows),
+                "avg_score": round(sum(r["avg_score"] * r["total"] for r in rows) / sum(r["total"] for r in rows), 2) if rows else 0,
+                "high_value": sum(r["high_value"] for r in rows),
+                "filtered": sum(r["filtered"] for r in rows),
+                "by_category": {r["category"]: r["total"] for r in rows}
+            }
+    
+    return self._execute_with_retry(_get)

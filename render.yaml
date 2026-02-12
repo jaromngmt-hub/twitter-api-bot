@@ -1,9 +1,9 @@
 services:
   - type: web
-    name: twitter-monitor-bot
+    name: twitter-api-bot
     runtime: docker
     plan: free
-    dockerfilePath: ./Dockerfile.render
+    dockerfilePath: Dockerfile.render
     envVars:
       - key: DATABASE_PATH
         value: /app/data/monitor.db
@@ -15,7 +15,10 @@ services:
         value: "INFO"
       - key: PYTHONUNBUFFERED
         value: "1"
+      - key: PORT
+        value: "8000"
     disk:
       name: data
       mountPath: /app/data
       sizeGB: 1
+    healthCheckPath: /api/health

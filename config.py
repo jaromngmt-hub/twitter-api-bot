@@ -16,6 +16,9 @@ class Settings:
     # TwitterAPI.io
     TWITTERAPI_KEY: str = os.getenv("TWITTERAPI_KEY", "")
     
+    # OpenAI (for tweet analysis)
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    
     # Database
     DATABASE_PATH: str = os.getenv("DATABASE_PATH", "./monitor.db")
     
@@ -33,6 +36,18 @@ class Settings:
     DISCORD_TIMEOUT: int = 10
     DISCORD_RETRY_ATTEMPTS: int = 3
     DISCORD_RETRY_DELAY: int = 1
+    
+    # Tiered Discord Webhooks (for AI rating system)
+    # Tier 2 (4-6 score): Standard updates
+    DISCORD_WEBHOOK_TIER2: str = os.getenv("DISCORD_WEBHOOK_TIER2", "")
+    # Tier 3 (7-8 score): Premium alpha
+    DISCORD_WEBHOOK_TIER3: str = os.getenv("DISCORD_WEBHOOK_TIER3", "")
+    # Tier 4 (9-10 score): Urgent alerts
+    DISCORD_WEBHOOK_TIER4: str = os.getenv("DISCORD_WEBHOOK_TIER4", "")
+    
+    # AI Analysis Settings
+    ENABLE_AI_ANALYSIS: bool = os.getenv("ENABLE_AI_ANALYSIS", "true").lower() == "true"
+    AI_MIN_SCORE_TO_SEND: int = int(os.getenv("AI_MIN_SCORE_TO_SEND", "4"))  # Filter < 4
     
     # TwitterAPI
     TWITTERAPI_BASE_URL: str = "https://api.twitterapi.io"
