@@ -483,7 +483,21 @@ Respond in JSON:
         data = json.loads(content)
         
         tech_stack = TechStack(**data["tech_stack"])
-        components = [Component(**c) for c in data["components"]]
+        # Handle components safely - AI sometimes returns strings instead of objects
+        components = []
+        for c in data.get("components", []):
+            if isinstance(c, dict):
+                components.append(Component(**c))
+            elif isinstance(c, str):
+                # Convert string to component
+                components.append(Component(
+                    name=c,
+                    type="module",
+                    description=f"Component: {c}",
+                    responsibilities=[],
+                    dependencies=[],
+                    files=[]
+                ))
         
         logger.info(f"✅ Architecture planned: {project_type} with {tech_stack.language}/{tech_stack.framework}")
         
@@ -558,7 +572,20 @@ Respond in JSON with tech_stack, components, api_endpoints, etc."""
         
         # Add Vercel AI SDK to tech stack
         tech_stack = TechStack(**data["tech_stack"])
-        components = [Component(**c) for c in data["components"]]
+        # Handle components safely
+        components = []
+        for c in data.get("components", []):
+            if isinstance(c, dict):
+                components.append(Component(**c))
+            elif isinstance(c, str):
+                components.append(Component(
+                    name=c,
+                    type="module", 
+                    description=f"Component: {c}",
+                    responsibilities=[],
+                    dependencies=[],
+                    files=[]
+                ))
         
         logger.info(f"✅ AI Architecture planned: {project_type} with Vercel AI SDK ({len(components)} components)")
         
