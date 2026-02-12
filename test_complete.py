@@ -65,7 +65,14 @@ Twitter Monitor Bot is working!
 Monitor runs every 30 minutes.
 You'll get WhatsApp alerts for high-value tweets (8-10/10).
 
-Reply BUILD to create projects with Kimi+Qwen!"""
+━━━━━━━━━━━━━━━━━━━━━━
+*When you get alerts, reply:*
+1️⃣ *INTERESTING* → Share to Discord
+2️⃣ *NOTHING* → Skip this  
+3️⃣ *BUILD* → 🚀 Create project
+━━━━━━━━━━━━━━━━━━━━━━
+
+💡 *Quick reply:* Type 1/2/3 or I/N/B"""
             )
             print("  ✅ Test message sent! Check your WhatsApp.")
         else:
