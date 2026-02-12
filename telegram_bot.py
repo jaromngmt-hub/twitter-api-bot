@@ -38,23 +38,20 @@ class TelegramBot:
         if not self.enabled:
             return {"sent": False, "error": "Telegram not configured"}
         
-        # Truncate and escape tweet text for Telegram MarkdownV2
+        # Truncate tweet text
         display_text = tweet_text[:350] + "..." if len(tweet_text) > 350 else tweet_text
-        # Escape special MarkdownV2 characters
-        import re
-        escape_chars = r'_*[]()~`>#+-=|{}.!'
-        display_text = ''.join(f'\\{c}' if c in escape_chars else c for c in display_text)
-        reason_clean = ''.join(f'\\{c}' if c in escape_chars else c for c in reason[:100])
         
-        message = f"""🚨 URGENT TWEET {score}/10
+        # Use HTML for safe formatting
+        from html import escape
+        message = f"""🚨 <b>URGENT TWEET {score}/10</b>
 
 👤 @{username}
 📊 Category: {category.upper()}
 
-💬 Tweet:
-{display_text}
+💬 <b>Tweet:</b>
+<code>{escape(display_text)}</code>
 
-📝 Why: {reason_clean}
+📝 <b>Why:</b> {escape(reason[:100])}
 
 Reply with buttons below ⬇️"""
 
@@ -76,7 +73,7 @@ Reply with buttons below ⬇️"""
                     json={
                         "chat_id": self.chat_id,
                         "text": message,
-                        "parse_mode": "Markdown",
+                        "parse_mode": "HTML",
                         "reply_markup": keyboard,
                         "disable_web_page_preview": True
                     }
