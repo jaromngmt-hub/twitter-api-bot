@@ -276,5 +276,58 @@ async def health_check():
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 
+@app.post("/api/test/whatsapp")
+async def test_whatsapp():
+    """Send a test WhatsApp urgent notification."""
+    from urgent_notifier import UrgentNotifier
+    from models import Tweet
+    
+    # Create a fake urgent tweet
+    test_tweet = Tweet(
+        id="1234567890123456789",
+        text="🚀 BREAKING: Major crypto announcement! This could be huge for the market. Full details in thread...",
+        created_at=datetime.now(),
+        author_id="987654321",
+        metrics={"likes": 25000, "retweets": 8000, "replies": 2000}
+    )
+    
+    test_rating = {
+        "score": 10,
+        "category": "alpha",
+        "summary": "Major market-moving announcement detected by AI",
+        "reason": "High engagement and keyword analysis suggest this is significant alpha that requires immediate attention."
+    }
+    
+    try:
+        async with UrgentNotifier() as notifier:
+            if not notifier.is_configured():
+                return {
+                    "success": False,
+                    "error": "WhatsApp not configured",
+                    "message": "Add TWILIO_* environment variables to enable WhatsApp"
+                }
+            
+            if not notifier.enabled:
+                return {
+                    "success": False, 
+                    "error": "Notifications disabled",
+                    "message": "Set URGENT_NOTIFICATIONS_ENABLED=true to enable"
+                }
+            
+            result = await notifier.send_urgent_notification(
+                username="test_user",
+                tweet=test_tweet,
+                rating=test_rating
+            )
+            
+            return {
+                "success": result["sent"],
+                "message": "Test WhatsApp sent! Check your phone." if result["sent"] else "Failed to send",
+                "details": result
+            }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
