@@ -417,5 +417,72 @@ async def get_rate_limit_status():
     return {"rate_limit": status, "queue": queue}
 
 
+@app.post("/api/test/build")
+async def test_build_agent():
+    """
+    Test the BUILD agent with a sample tweet.
+    
+    Runs full 6-stage pipeline:
+    1. Kimi K2 - Analyze
+    2. Kimi K2 - Plan  
+    3. Kimi K2 - Design
+    4. Qwen Coder - Implement (code + tests)
+    5. Kimi K2 - Review
+    6. Qwen Coder - Deploy config
+    """
+    from build_agent_enhanced import enhanced_build_agent
+    
+    # Test tweet - CLI tool example
+    test_tweet = "Build a CLI tool that backs up all my GitHub repositories to local disk with progress bars and incremental updates"
+    test_username = "test_user"
+    
+    logger.info("🧪 Testing BUILD agent with sample tweet...")
+    logger.info(f"Tweet: {test_tweet}")
+    
+    try:
+        # Run full build pipeline
+        result = await enhanced_build_agent.build_project(test_tweet, test_username)
+        
+        if result["success"]:
+            return {
+                "success": True,
+                "message": "✅ Build test completed successfully!",
+                "project_name": result["project_name"],
+                "project_path": result["project_path"],
+                "tech_stack": result["tech_stack"],
+                "stats": result["stats"],
+                "build_log": result["build_log"],
+                "next_steps": result["next_steps"][:3]  # First 3 steps
+            }
+        else:
+            return {
+                "success": False,
+                "error": result.get("error", "Unknown error"),
+                "message": "❌ Build test failed"
+            }
+            
+    except Exception as e:
+        logger.error(f"Build test failed: {e}")
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+
+@app.get("/api/models")
+async def get_available_models():
+    """Get available AI models and their pricing."""
+    from ai_router import ai_router
+    return {
+        "models": ai_router.list_models(),
+        "defaults": {
+            "analysis": "kimi-k2 (excellent reasoning)",
+            "code": "qwen-coder (40x cheaper, excellent code)"
+        }
+    }
+
+
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
