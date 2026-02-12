@@ -557,12 +557,6 @@ Respond in JSON with tech_stack, components, api_endpoints, etc."""
             requirements=requirements,
             tech_stack=tech_stack,
             components=components,
-            api_endpoints=data["api_endpoints"],
-            data_models=data["data_models"],
-            file_structure=data["file_structure"],
-            estimated_hours=data["estimated_hours"],
-            risks=data.get("risks", [])
-        )
             requirements=requirements,
             tech_stack=tech_stack,
             components=components,
