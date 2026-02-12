@@ -44,6 +44,8 @@ class Settings:
     DISCORD_WEBHOOK_TIER3: str = os.getenv("DISCORD_WEBHOOK_TIER3", "")
     # Tier 4 (9-10 score): Urgent alerts
     DISCORD_WEBHOOK_TIER4: str = os.getenv("DISCORD_WEBHOOK_TIER4", "")
+    # INTERESTING channel (for user-approved tweets)
+    DISCORD_WEBHOOK_INTERESTING: str = os.getenv("DISCORD_WEBHOOK_INTERESTING", "")
     
     # AI Analysis Settings
     ENABLE_AI_ANALYSIS: bool = os.getenv("ENABLE_AI_ANALYSIS", "true").lower() == "true"
@@ -66,6 +68,10 @@ class Settings:
     # Pushover
     PUSHOVER_APP_TOKEN: str = os.getenv("PUSHOVER_APP_TOKEN", "")
     PUSHOVER_USER_KEY: str = os.getenv("PUSHOVER_USER_KEY", "")
+    
+    # GitHub (for Build Agent)
+    GITHUB_TOKEN: str = os.getenv("GITHUB_TOKEN", "")
+    GITHUB_USERNAME: str = os.getenv("GITHUB_USERNAME", "")
     
     # TwitterAPI
     TWITTERAPI_BASE_URL: str = "https://api.twitterapi.io"

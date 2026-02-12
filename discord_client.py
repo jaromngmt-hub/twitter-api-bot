@@ -19,7 +19,7 @@ class DiscordWebhookError(Exception):
 class DiscordClient:
     """Async client for Discord webhooks."""
     
-    MAX_TEXT_LENGTH = 4096  # Discord embed description limit
+    MAX_TEXT_LENGTH = 4000  # Leave room for RT formatting
     AVATAR_URL = "https://abs.twimg.com/icons/apple-touch-icon-192x192.png"
     BOT_USERNAME = "Twitter Monitor"
     
@@ -61,10 +61,27 @@ class DiscordClient:
             return text
         return text[:self.MAX_TEXT_LENGTH - 3] + "..."
     
+    def _format_tweet_text(self, tweet: Tweet) -> str:
+        """Format tweet text with full content, handle RTs properly."""
+        text = tweet.text
+        
+        # Handle retweets - show full original text
+        if text.startswith("RT @"):
+            # Format: "RT @username: original text"
+            # Make it clearer
+            parts = text.split(": ", 1)
+            if len(parts) == 2:
+                rt_header = parts[0]  # "RT @username"
+                original_text = parts[1]  # the actual tweet
+                text = f"**{rt_header}**\n\n{original_text}"
+        
+        # Truncate if still too long
+        return self._truncate_text(text)
+    
     def _build_payload(self, username: str, tweet: Tweet) -> dict:
         """Build Discord webhook payload."""
-        # Truncate text if needed
-        description = self._truncate_text(tweet.text)
+        # Format text with full content
+        description = self._format_tweet_text(tweet)
         
         # Get first media URL if available
         image_url = tweet.media_urls[0] if tweet.media_urls else None

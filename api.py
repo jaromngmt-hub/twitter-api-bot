@@ -357,5 +357,56 @@ async def test_whatsapp():
         return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
 
 
+@app.post("/api/webhook/twilio/whatsapp")
+async def twilio_whatsapp_webhook(
+    From: str = "",
+    Body: str = "",
+    MessageSid: str = ""
+):
+    """
+    Receive WhatsApp replies from Twilio.
+    
+    User replies to urgent tweets with:
+    - INTERESTING → Send to Discord
+    - NOTHING → Skip/filter
+    - BUILD → Create project
+    """
+    from whatsapp_handler import whatsapp_handler
+    
+    logger.info(f"WhatsApp reply from {From}: {Body}")
+    
+    # Process the reply
+    response_message = await whatsapp_handler.process_reply(From, Body)
+    
+    # Return TwiML response (XML)
+    from fastapi.responses import PlainTextResponse
+    twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Message>{response_message}</Message>
+</Response>"""
+    
+    return PlainTextResponse(content=twiml, media_type="application/xml")
+
+
+@app.get("/api/pending")
+async def get_pending_tweets():
+    """Get list of pending tweets awaiting user action."""
+    from whatsapp_handler import whatsapp_handler
+    
+    return {
+        "pending_count": whatsapp_handler.get_pending_count(),
+        "pending": [
+            {
+                "phone": phone,
+                "username": data["username"],
+                "score": data["rating"].get("score", 0),
+                "sent_at": data["sent_at"].isoformat(),
+                "status": data["status"]
+            }
+            for phone, data in whatsapp_handler.pending_tweets.items()
+        ]
+    }
+
+
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)

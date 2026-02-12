@@ -19,6 +19,7 @@ from twitter_client import (
     TwitterRateLimitError,
 )
 from urgent_notifier import UrgentNotifier
+from whatsapp_handler import whatsapp_handler
 
 
 class AIScheduler:
@@ -205,6 +206,18 @@ class AIScheduler:
                         )
                         if notify_result["sent"]:
                             logger.info(f"🚨 URGENT notification sent for @{user.username} (score: {rating.score})")
+                            # Store pending tweet for user reply
+                            whatsapp_handler.store_pending_tweet(
+                                phone=settings.YOUR_PHONE_NUMBER,
+                                username=user.username,
+                                tweet=tweet,
+                                rating={
+                                    "score": rating.score,
+                                    "category": rating.category,
+                                    "summary": rating.summary,
+                                    "reason": rating.reason
+                                }
+                            )
                         else:
                             logger.warning(f"Failed to send urgent notification: {notify_result}")
                     except Exception as e:

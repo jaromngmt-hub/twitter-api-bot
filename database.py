@@ -120,6 +120,22 @@ class Database:
                 )
             """)
             
+            # Create user_actions table (for WhatsApp reply tracking)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS user_actions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    phone TEXT NOT NULL,
+                    action TEXT NOT NULL, -- INTERESTING, FILTERED, BUILD_INITIATED, BUILD_APPROVED
+                    username TEXT,
+                    tweet_id TEXT,
+                    tweet_text TEXT,
+                    ai_score INTEGER,
+                    project_name TEXT,
+                    reason TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
             # Create indexes
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_users_channel 
@@ -132,6 +148,10 @@ class Database:
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_ratings_lookup 
                 ON tweet_ratings(tweet_id, channel_id)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_user_actions_phone 
+                ON user_actions(phone, created_at)
             """)
             
             logger.info("Database initialized successfully")
@@ -206,6 +226,58 @@ class Database:
                 return cursor.rowcount > 0
         
         return self._execute_with_retry(_delete)
+    
+    # User action logging (for WhatsApp replies)
+    def log_user_action(
+        self,
+        phone: str,
+        action: str,
+        username: str = None,
+        tweet_id: str = None,
+        tweet_text: str = None,
+        ai_score: int = None,
+        project_name: str = None,
+        reason: str = None
+    ) -> int:
+        """Log user action from WhatsApp reply."""
+        def _log():
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """INSERT INTO user_actions 
+                       (phone, action, username, tweet_id, tweet_text, ai_score, project_name, reason)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (phone, action, username, tweet_id, tweet_text, ai_score, project_name, reason)
+                )
+                return cursor.lastrowid
+        
+        return self._execute_with_retry(_log)
+    
+    def get_user_action_stats(self, phone: str = None, days: int = 7) -> dict:
+        """Get user action statistics."""
+        def _get():
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                
+                if phone:
+                    cursor.execute("""
+                        SELECT action, COUNT(*) as count
+                        FROM user_actions
+                        WHERE phone = ? AND created_at >= datetime('now', '-{} days')
+                        GROUP BY action
+                    """.format(days), (phone,))
+                else:
+                    cursor.execute("""
+                        SELECT action, COUNT(*) as count
+                        FROM user_actions
+                        WHERE created_at >= datetime('now', '-{} days')
+                        GROUP BY action
+                    """.format(days))
+                
+                rows = cursor.fetchall()
+                return {r["action"]: r["count"] for r in rows}
+        
+        return self._execute_with_retry(_get)
     
     # User operations
     def add_user(self, username: str, channel_id: int, last_tweet_id: str = None) -> int:

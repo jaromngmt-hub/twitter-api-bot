@@ -158,7 +158,7 @@ Open: https://twitter.com/{username}
             return {"sent": False, "error": f"HTTP {response.status_code}: {response.text}"}
     
     async def _send_whatsapp(self, username: str, tweet: Tweet, rating: dict) -> dict:
-        """Send WhatsApp message via Twilio."""
+        """Send WhatsApp message via Twilio with action options."""
         if not all([self.twilio_sid, self.twilio_token, self.your_phone]):
             return {"sent": False, "error": "Twilio not configured"}
         
@@ -167,7 +167,7 @@ Open: https://twitter.com/{username}
         category = rating.get("category", "unknown")
         reason = rating.get("reason", "High value content")
         
-        # Richer message for WhatsApp
+        # Richer message for WhatsApp with action options
         message = f"""🚨 *URGENT TWEET ALERT* 🚨
 
 *Score:* {score}/10 ⭐
@@ -182,8 +182,12 @@ Open: https://twitter.com/{username}
 
 🔗 Open: https://twitter.com/{username}/status/{tweet.id}
 
-—
-Twitter Monitor Bot 🤖
+━━━━━━━━━━━━━━━━━━━━━━
+*Reply with:*
+1️⃣ *INTERESTING* → Share to Discord
+2️⃣ *NOTHING* → Skip this
+3️⃣ *BUILD* → Create project
+━━━━━━━━━━━━━━━━━━━━━━
 """
         
         # Use Twilio WhatsApp sandbox number (NOT your regular Twilio number)
@@ -191,6 +195,32 @@ Twitter Monitor Bot 🤖
         from_number = "whatsapp:+14155238886"
         
         to_number = self.your_phone
+        if not to_number.startswith("whatsapp:"):
+            to_number = f"whatsapp:{to_number}"
+        
+        response = await self.client.post(
+            f"https://api.twilio.com/2010-04-01/Accounts/{self.twilio_sid}/Messages.json",
+            auth=(self.twilio_sid, self.twilio_token),
+            data={
+                "From": from_number,
+                "To": to_number,
+                "Body": message
+            }
+        )
+        
+        if response.status_code == 201:
+            return {"sent": True, "sid": response.json().get("sid")}
+        else:
+            return {"sent": False, "error": f"HTTP {response.status_code}: {response.text}"}
+    
+    async def _send_whatsapp_raw(self, to: str, message: str) -> dict:
+        """Send raw WhatsApp message (used by Build Agent)."""
+        if not all([self.twilio_sid, self.twilio_token]):
+            return {"sent": False, "error": "Twilio not configured"}
+        
+        from_number = "whatsapp:+14155238886"
+        
+        to_number = to
         if not to_number.startswith("whatsapp:"):
             to_number = f"whatsapp:{to_number}"
         
