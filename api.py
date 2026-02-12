@@ -486,12 +486,9 @@ async def telegram_webhook(request: dict):
             
             logger.info(f"Telegram message from {chat_id}: {text}")
             
-            # Check if we're awaiting requirements for any build
-            awaiting = None
-            for alert_id, data in telegram_bot.awaiting_requirements.items():
-                if data.get("chat_id") == chat_id:
-                    awaiting = alert_id
-                    break
+            # Check if we're awaiting requirements for any build (from DATABASE)
+            awaiting_builds = db.get_awaiting_builds(str(chat_id))
+            awaiting = awaiting_builds[0]['alert_id'] if awaiting_builds else None
             
             if awaiting:
                 # This is a requirements reply - process it

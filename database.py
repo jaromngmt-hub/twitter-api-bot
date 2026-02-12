@@ -136,6 +136,24 @@ class Database:
                 )
             """)
             
+            # Pending builds table - stores awaiting requirements (survives server restarts)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS pending_builds (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    alert_id TEXT UNIQUE NOT NULL,
+                    username TEXT NOT NULL,
+                    tweet_text TEXT NOT NULL,
+                    score INTEGER,
+                    category TEXT,
+                    reason TEXT,
+                    chat_id TEXT NOT NULL,
+                    status TEXT DEFAULT 'awaiting_requirements', -- awaiting_requirements, building, completed, failed
+                    user_requirements TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
             # Create indexes
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_users_channel 
@@ -471,6 +489,128 @@ class Database:
                 return cursor.lastrowid
         
         return self._execute_with_retry(_record)
+    
+    # ═══════════════════════════════════════════════════════════════
+    # PENDING BUILDS - Stores build requirements (survives restarts)
+    # ═══════════════════════════════════════════════════════════════
+    
+    def create_pending_build(
+        self,
+        alert_id: str,
+        username: str,
+        tweet_text: str,
+        score: int,
+        category: str,
+        reason: str,
+        chat_id: str
+    ) -> int:
+        """Create a pending build entry when user clicks BUILD."""
+        def _create():
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """INSERT OR REPLACE INTO pending_builds 
+                       (alert_id, username, tweet_text, score, category, reason, chat_id, status)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, 'awaiting_requirements')""",
+                    (alert_id, username, tweet_text, score, category, reason, chat_id)
+                )
+                conn.commit()
+                return cursor.lastrowid
+        
+        return self._execute_with_retry(_create)
+    
+    def get_pending_build(self, alert_id: str) -> Optional[Dict]:
+        """Get pending build by alert_id."""
+        def _get():
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """SELECT * FROM pending_builds 
+                       WHERE alert_id = ? AND status = 'awaiting_requirements'""",
+                    (alert_id,)
+                )
+                row = cursor.fetchone()
+                if row:
+                    return {
+                        'id': row[0],
+                        'alert_id': row[1],
+                        'username': row[2],
+                        'tweet_text': row[3],
+                        'score': row[4],
+                        'category': row[5],
+                        'reason': row[6],
+                        'chat_id': row[7],
+                        'status': row[8],
+                        'user_requirements': row[9],
+                        'created_at': row[10]
+                    }
+                return None
+        
+        return self._execute_with_retry(_get)
+    
+    def update_build_requirements(self, alert_id: str, requirements: str) -> bool:
+        """Update build with user requirements and mark as building."""
+        def _update():
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """UPDATE pending_builds 
+                       SET user_requirements = ?, status = 'building', updated_at = CURRENT_TIMESTAMP
+                       WHERE alert_id = ?""",
+                    (requirements, alert_id)
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+        
+        return self._execute_with_retry(_update)
+    
+    def mark_build_completed(self, alert_id: str, success: bool = True) -> bool:
+        """Mark build as completed or failed."""
+        def _update():
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                status = 'completed' if success else 'failed'
+                cursor.execute(
+                    """UPDATE pending_builds 
+                       SET status = ?, updated_at = CURRENT_TIMESTAMP
+                       WHERE alert_id = ?""",
+                    (status, alert_id)
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+        
+        return self._execute_with_retry(_update)
+    
+    def get_awaiting_builds(self, chat_id: str) -> List[Dict]:
+        """Get all builds awaiting requirements for a chat."""
+        def _get():
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """SELECT * FROM pending_builds 
+                       WHERE chat_id = ? AND status = 'awaiting_requirements'
+                       ORDER BY created_at DESC""",
+                    (chat_id,)
+                )
+                rows = cursor.fetchall()
+                return [
+                    {
+                        'id': row[0],
+                        'alert_id': row[1],
+                        'username': row[2],
+                        'tweet_text': row[3],
+                        'score': row[4],
+                        'category': row[5],
+                        'reason': row[6],
+                        'chat_id': row[7],
+                        'status': row[8],
+                        'user_requirements': row[9],
+                        'created_at': row[10]
+                    }
+                    for row in rows
+                ]
+        
+        return self._execute_with_retry(_get)
 
 
 # Global database instance

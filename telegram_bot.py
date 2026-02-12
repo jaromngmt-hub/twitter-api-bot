@@ -10,6 +10,7 @@ from typing import Optional, Dict, Any
 from loguru import logger
 
 from config import settings
+from database import db
 
 
 class TelegramBot:
@@ -21,11 +22,10 @@ class TelegramBot:
         self.enabled = settings.USE_TELEGRAM and bool(self.token and self.chat_id)
         self.base_url = f"https://api.telegram.org/bot{self.token}" if self.token else None
         
-        # Store pending tweets awaiting user action
+        # Store pending tweets awaiting user action (memory only - for quick access)
         self.pending_tweets: Dict[str, Dict] = {}
         
-        # Store builds awaiting requirements
-        self.awaiting_requirements: Dict[str, Dict] = {}
+        # Note: awaiting_requirements now stored in DATABASE (survives restarts)
         
         # Counters for each category (AI-001, CRYPTO-005, etc.)
         self.category_counters: Dict[str, int] = {}
@@ -202,12 +202,20 @@ Choose action ⬇️"""
         
         pending = self.pending_tweets.get(alert_id, {})
         
-        # Store that we're awaiting requirements
-        self.awaiting_requirements[alert_id] = {
-            **pending,
-            "chat_id": chat_id,
-            "requested_at": datetime.now()
-        }
+        # Store in DATABASE (survives server restarts)
+        try:
+            db.create_pending_build(
+                alert_id=alert_id,
+                username=pending.get('username', 'unknown'),
+                tweet_text=pending.get('text', ''),
+                score=pending.get('score', 0),
+                category=pending.get('category', 'general'),
+                reason=pending.get('reason', ''),
+                chat_id=str(chat_id)
+            )
+            logger.info(f"Stored pending build [{alert_id}] in database")
+        except Exception as e:
+            logger.error(f"Failed to store pending build: {e}")
         
         # Send requirements request
         message = f"""🔨 BUILD: [{alert_id}]
@@ -237,10 +245,15 @@ Or reply "DEFAULT" to build as-is."""
     async def process_reply(self, action: str, alert_id: str, user_text: str = None, chat_id: int = None) -> Dict:
         """Process user reply action."""
         
-        # Check if this is a requirements reply for a build
-        if alert_id in self.awaiting_requirements and user_text:
+        # Check if this is a requirements reply for a build (check DATABASE)
+        build_data = None
+        if user_text and chat_id:
+            build_data = db.get_pending_build(alert_id)
+        
+        if build_data:
             # This is requirements input - trigger the actual build
-            build_data = self.awaiting_requirements.pop(alert_id)
+            # Update database with requirements
+            db.update_build_requirements(alert_id, user_text)
             
             requirements = user_text if user_text.upper() != "DEFAULT" else "None - build as described in tweet"
             
@@ -249,7 +262,7 @@ Or reply "DEFAULT" to build as-is."""
                 from build_agent_enhanced import enhanced_build_agent
                 
                 # Enhance the tweet text with user requirements
-                enhanced_tweet = f"""Project idea: {build_data.get('text', '')}
+                enhanced_tweet = f"""Project idea: {build_data.get('tweet_text', '')}
 
 User requirements: {requirements}"""
                 
@@ -257,6 +270,9 @@ User requirements: {requirements}"""
                     tweet_text=enhanced_tweet,
                     username=build_data.get("username", "unknown")
                 )
+                
+                # Mark as completed in database
+                db.mark_build_completed(alert_id, success=result["success"])
                 
                 if result["success"]:
                     if alert_id in self.pending_tweets:
@@ -269,6 +285,7 @@ User requirements: {requirements}"""
                 else:
                     return {"success": False, "message": f"[{alert_id}] Build failed: {result.get('error', 'Unknown')}"}
             except Exception as e:
+                db.mark_build_completed(alert_id, success=False)
                 return {"success": False, "message": f"[{alert_id}] Build error: {e}"}
         
         # Get pending tweet data

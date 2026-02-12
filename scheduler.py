@@ -4,6 +4,7 @@ import asyncio
 import signal
 from typing import List, Optional
 
+import httpx
 from loguru import logger
 
 from config import settings
@@ -191,6 +192,26 @@ class Scheduler:
         
         logger.info("Monitoring cycle completed")
     
+    async def _self_ping(self) -> None:
+        """Ping our own health endpoint every 10 min to keep Render awake."""
+        # Use localhost for internal ping
+        health_url = "http://localhost:8000/api/health"
+        
+        while self.running:
+            try:
+                await asyncio.sleep(600)  # 10 minutes
+                if not self.running:
+                    break
+                    
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(health_url, timeout=10)
+                    if response.status_code == 200:
+                        logger.debug("Self-ping successful - keeping Render awake")
+                    else:
+                        logger.warning(f"Self-ping failed: {response.status_code}")
+            except Exception as e:
+                logger.debug(f"Self-ping error (Render might be sleeping): {e}")
+    
     async def run(self) -> None:
         """Run continuous monitoring loop."""
         self.running = True
@@ -201,6 +222,9 @@ class Scheduler:
             loop.add_signal_handler(sig, self._signal_handler)
         
         logger.info(f"Starting monitor loop with {self.interval}s interval")
+        
+        # Start self-ping task to keep Render awake
+        ping_task = asyncio.create_task(self._self_ping())
         
         try:
             while self.running:
@@ -230,6 +254,7 @@ class Scheduler:
         
         finally:
             self.running = False
+            ping_task.cancel()
             logger.info("Monitor loop stopped")
     
     def _signal_handler(self) -> None:
