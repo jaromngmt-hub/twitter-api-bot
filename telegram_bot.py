@@ -23,6 +23,24 @@ class TelegramBot:
         
         # Store pending tweets awaiting user action
         self.pending_tweets: Dict[str, Dict] = {}
+        
+        # Counters for each category (AI-001, CRYPTO-005, etc.)
+        self.category_counters: Dict[str, int] = {}
+        self.global_counter = 0
+    
+    def _generate_tweet_id(self, category: str) -> str:
+        """Generate unique ID like AI-001, CRYPTO-005, etc."""
+        category = category.upper()[:10]  # Max 10 chars
+        
+        # Increment counter for this category
+        if category not in self.category_counters:
+            self.category_counters[category] = 0
+        self.category_counters[category] += 1
+        
+        # Also global counter for uniqueness
+        self.global_counter += 1
+        
+        return f"{category}-{self.category_counters[category]:03d}"
     
     async def send_urgent_tweet(
         self,
@@ -38,29 +56,30 @@ class TelegramBot:
         if not self.enabled:
             return {"sent": False, "error": "Telegram not configured"}
         
-        # Truncate tweet text (no formatting to avoid parse errors)
-        display_text = tweet_text[:300] + "..." if len(tweet_text) > 300 else tweet_text
-        reason_clean = reason[:80] + "..." if len(reason) > 80 else reason
+        # Generate unique ID for this alert
+        alert_id = self._generate_tweet_id(category)
         
-        message = f"""🚨 URGENT TWEET {score}/10
+        # Truncate tweet text
+        display_text = tweet_text[:280] + "..." if len(tweet_text) > 280 else tweet_text
+        reason_clean = reason[:60] + "..." if len(reason) > 60 else reason
+        
+        message = f"""🚨 [{alert_id}] URGENT {score}/10
 
-👤 @{username}
-📊 Category: {category.upper()}
+👤 @{username} | 📊 {category.upper()}
 
-💬 Tweet:
-{display_text}
+💬 {display_text}
 
-📝 Why: {reason_clean}
+📝 {reason_clean}
 
-Reply with buttons below ⬇️"""
+Choose action ⬇️"""
 
         # Inline keyboard with action buttons
         keyboard = {
             "inline_keyboard": [
                 [
-                    {"text": "1️⃣ INTERESTING", "callback_data": f"INTERESTING:{tweet_id or 'unknown'}"},
-                    {"text": "2️⃣ NOTHING", "callback_data": f"NOTHING:{tweet_id or 'unknown'}"},
-                    {"text": "3️⃣ BUILD", "callback_data": f"BUILD:{tweet_id or 'unknown'}"}
+                    {"text": "1️⃣ INTERESTING", "callback_data": f"INTERESTING:{alert_id}"},
+                    {"text": "2️⃣ NOTHING", "callback_data": f"NOTHING:{alert_id}"},
+                    {"text": "3️⃣ BUILD", "callback_data": f"BUILD:{alert_id}"}
                 ]
             ]
         }
@@ -81,20 +100,22 @@ Reply with buttons below ⬇️"""
                     data = response.json()
                     sent_message_id = data["result"]["message_id"]
                     
-                    # Store pending tweet
-                    if tweet_id:
-                        self.pending_tweets[tweet_id] = {
-                            "username": username,
-                            "text": tweet_text,
-                            "score": score,
-                            "category": category,
-                            "sent_at": datetime.now(),
-                            "telegram_message_id": sent_message_id,
-                            "status": "pending"
-                        }
+                    # Store pending tweet with alert_id as key
+                    self.pending_tweets[alert_id] = {
+                        "alert_id": alert_id,
+                        "username": username,
+                        "text": tweet_text,
+                        "score": score,
+                        "category": category,
+                        "reason": reason,
+                        "sent_at": datetime.now(),
+                        "telegram_message_id": sent_message_id,
+                        "status": "pending",
+                        "original_tweet_id": tweet_id
+                    }
                     
-                    logger.info(f"📨 Telegram sent for @{username} (message_id: {sent_message_id})")
-                    return {"sent": True, "message_id": sent_message_id, "cost": "$0.00"}
+                    logger.info(f"📨 Telegram sent [{alert_id}] for @{username}")
+                    return {"sent": True, "alert_id": alert_id, "message_id": sent_message_id, "cost": "$0.00"}
                 else:
                     error = response.json().get("description", "Unknown error")
                     logger.error(f"Telegram send failed: {error}")
@@ -115,8 +136,7 @@ Reply with buttons below ⬇️"""
                     f"{self.base_url}/sendMessage",
                     json={
                         "chat_id": chat_id,
-                        "text": text,
-                        "parse_mode": "Markdown"
+                        "text": text
                     }
                 )
                 return {"sent": response.status_code == 200}
@@ -134,7 +154,7 @@ Reply with buttons below ⬇️"""
                     f"{self.base_url}/answerCallbackQuery",
                     json={
                         "callback_query_id": callback_id,
-                        "text": text
+                        "text": text[:200]  # Max 200 chars
                     }
                 )
         except Exception as e:
@@ -145,7 +165,8 @@ Reply with buttons below ⬇️"""
         chat_id: int,
         message_id: int,
         action: str,
-        result: Dict
+        result: Dict,
+        alert_id: str = ""
     ):
         """Update message to show action taken."""
         if not self.base_url:
@@ -154,6 +175,8 @@ Reply with buttons below ⬇️"""
         # Action emojis
         emoji = {"INTERESTING": "📌", "NOTHING": "🗑️", "BUILD": "🔨"}.get(action, "✅")
         
+        text = f"{emoji} [{alert_id}] {action}\n\n{result.get('message', 'Done!')}"
+        
         try:
             async with httpx.AsyncClient() as client:
                 await client.post(
@@ -161,19 +184,19 @@ Reply with buttons below ⬇️"""
                     json={
                         "chat_id": chat_id,
                         "message_id": message_id,
-                        "text": f"{emoji} Action Taken: {action}\n\n{result.get('message', 'Processing...')}"
+                        "text": text
                     }
                 )
         except Exception as e:
             logger.error(f"Failed to update message: {e}")
     
-    async def process_reply(self, action: str, tweet_id: Optional[str] = None) -> Dict:
+    async def process_reply(self, action: str, alert_id: str) -> Dict:
         """Process user reply action."""
         
+        # Get pending tweet data
+        pending = self.pending_tweets.get(alert_id, {})
+        
         if action == "INTERESTING":
-            # Get pending tweet data
-            pending = self.pending_tweets.get(tweet_id, {})
-            
             # Send to Discord "Interesting" channel
             try:
                 from discord_client import discord_client
@@ -181,30 +204,29 @@ Reply with buttons below ⬇️"""
                     username=pending.get("username", "unknown"),
                     tweet_text=pending.get("text", ""),
                     score=pending.get("score", 0),
-                    reason="User marked as INTERESTING from Telegram"
+                    reason=f"[{alert_id}] User marked as INTERESTING from Telegram"
                 )
                 
-                if tweet_id and tweet_id in self.pending_tweets:
-                    self.pending_tweets[tweet_id]["status"] = "interesting"
+                if alert_id in self.pending_tweets:
+                    self.pending_tweets[alert_id]["status"] = "interesting"
                 
-                return {"success": True, "message": "Sent to Discord #interesting! ✅"}
+                return {"success": True, "message": f"Sent to Discord #interesting! [{alert_id}]"}
             except Exception as e:
                 return {"success": False, "message": f"Discord error: {e}"}
         
         elif action == "NOTHING":
             # Just mark as filtered
-            if tweet_id and tweet_id in self.pending_tweets:
-                self.pending_tweets[tweet_id]["status"] = "filtered"
+            if alert_id in self.pending_tweets:
+                self.pending_tweets[alert_id]["status"] = "filtered"
             
-            return {"success": True, "message": "Skipped. Tweet filtered. 🗑️"}
+            return {"success": True, "message": f"Skipped [{alert_id}]. Tweet filtered."}
         
         elif action == "BUILD":
             # Trigger build process
-            pending = self.pending_tweets.get(tweet_id, {})
             tweet_text = pending.get("text", "")
             
             if not tweet_text:
-                return {"success": False, "message": "No tweet text found"}
+                return {"success": False, "message": f"[{alert_id}] No tweet text found"}
             
             try:
                 from build_agent_enhanced import enhanced_build_agent
@@ -215,23 +237,38 @@ Reply with buttons below ⬇️"""
                 )
                 
                 if result["success"]:
-                    if tweet_id and tweet_id in self.pending_tweets:
-                        self.pending_tweets[tweet_id]["status"] = "built"
+                    if alert_id in self.pending_tweets:
+                        self.pending_tweets[alert_id]["status"] = "built"
                     
                     return {
                         "success": True,
-                        "message": f"🔨 BUILD STARTED!\n\nProject: {result['project_name']}\nRepo: {result.get('repo_url', 'N/A')[:50]}..."
+                        "message": f"[{alert_id}] BUILD STARTED!\nProject: {result['project_name'][:30]}..."
                     }
                 else:
-                    return {"success": False, "message": f"Build failed: {result.get('error', 'Unknown')}"}
+                    return {"success": False, "message": f"[{alert_id}] Build failed: {result.get('error', 'Unknown')}"}
             except Exception as e:
-                return {"success": False, "message": f"Build error: {e}"}
+                return {"success": False, "message": f"[{alert_id}] Build error: {e}"}
         
         return {"success": False, "message": f"Unknown action: {action}"}
     
     def get_pending_count(self) -> int:
         """Get count of pending tweets."""
         return len([t for t in self.pending_tweets.values() if t.get("status") == "pending"])
+    
+    def get_pending_list(self) -> list:
+        """Get list of pending tweets with their IDs."""
+        return [
+            {
+                "id": alert_id,
+                "username": data["username"],
+                "category": data["category"],
+                "score": data["score"],
+                "status": data["status"],
+                "sent_at": data["sent_at"].isoformat()
+            }
+            for alert_id, data in self.pending_tweets.items()
+            if data.get("status") == "pending"
+        ]
     
     async def set_webhook(self, webhook_url: str) -> Dict:
         """Set webhook URL for receiving updates."""

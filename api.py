@@ -444,19 +444,19 @@ async def telegram_webhook(request: dict):
             
             logger.info(f"Telegram callback: {data}")
             
-            # Parse action and tweet_id
+            # Parse action and alert_id
             parts = data.split(":", 1)
             action = parts[0]
-            tweet_id = parts[1] if len(parts) > 1 else None
+            alert_id = parts[1] if len(parts) > 1 else ""
             
             # Process action
-            result = await telegram_bot.process_reply(action, tweet_id)
+            result = await telegram_bot.process_reply(action, alert_id)
             
             # Answer callback
             await telegram_bot.answer_callback(callback["id"], result.get("message", "Done!"))
             
             # Update message to show action taken
-            await telegram_bot.update_message(chat_id, message_id, action, result)
+            await telegram_bot.update_message(chat_id, message_id, action, result, alert_id)
             
             return {"ok": True}
         
@@ -528,20 +528,30 @@ async def twilio_whatsapp_webhook(
 @app.get("/api/pending")
 async def get_pending_tweets():
     """Get list of pending tweets awaiting user action."""
+    from telegram_bot import telegram_bot
     from whatsapp_handler import whatsapp_handler
     
+    # Get Telegram pending
+    telegram_pending = telegram_bot.get_pending_list()
+    
+    # Get WhatsApp pending (legacy)
+    whatsapp_pending = [
+        {
+            "id": f"WA-{i+1:03d}",
+            "phone": phone,
+            "username": data["username"],
+            "score": data["rating"].get("score", 0),
+            "sent_at": data["sent_at"].isoformat(),
+            "status": data["status"],
+            "source": "whatsapp"
+        }
+        for i, (phone, data) in enumerate(whatsapp_handler.pending_tweets.items())
+    ]
+    
     return {
-        "pending_count": whatsapp_handler.get_pending_count(),
-        "pending": [
-            {
-                "phone": phone,
-                "username": data["username"],
-                "score": data["rating"].get("score", 0),
-                "sent_at": data["sent_at"].isoformat(),
-                "status": data["status"]
-            }
-            for phone, data in whatsapp_handler.pending_tweets.items()
-        ]
+        "pending_count": len(telegram_pending) + len(whatsapp_pending),
+        "telegram_pending": telegram_pending,
+        "whatsapp_pending": whatsapp_pending
     }
 
 
