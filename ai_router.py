@@ -30,20 +30,31 @@ class ModelConfig:
     context: int  # context window
 
 
-# Model registry - ranked by coding skill
+# Model registry - optimized for specific tasks
 CODING_MODELS = {
+    # 🧠 REASONING MODELS (Analysis, Planning, Architecture)
+    "kimi-k2": ModelConfig(
+        id="moonshotai/kimi-k2",
+        name="Kimi K2",
+        strength="EXCELLENT reasoning and analysis, great for requirements & architecture",
+        input_price=0.50,
+        output_price=2.00,
+        context=256000
+    ),
     "claude-sonnet": ModelConfig(
         id="anthropic/claude-3.5-sonnet",
         name="Claude 3.5 Sonnet",
-        strength="Best overall code quality, follows instructions perfectly",
+        strength="Best overall reasoning and code quality",
         input_price=3.00,
         output_price=15.00,
         context=200000
     ),
+    
+    # 💻 CODING MODELS (Implementation, Tests)
     "qwen-coder": ModelConfig(
         id="qwen/qwen3-coder-next",
         name="Qwen3 Coder Next",
-        strength="EXCELLENT code, 40x cheaper than Claude, huge context",
+        strength="EXCELLENT code generation, 40x cheaper than Claude, huge context",
         input_price=0.07,
         output_price=0.30,
         context=262144
@@ -56,6 +67,8 @@ CODING_MODELS = {
         output_price=0.28,
         context=64000
     ),
+    
+    # 🔄 FALLBACK MODELS
     "gpt-4o": ModelConfig(
         id="openai/gpt-4o",
         name="GPT-4o",
@@ -93,14 +106,14 @@ class AIRouter:
             } if self.api_key else {}
         )
         
-        # Default model for each task type
+        # OPTIMIZED: Kimi for thinking, Qwen for coding!
         self.defaults = {
-            "requirements": "claude-sonnet",  # Needs reasoning
-            "architecture": "claude-sonnet",  # Complex decisions
-            "design": "claude-sonnet",        # Creative + technical
-            "code": "qwen-coder",             # BEST VALUE - cheap + excellent code
-            "review": "claude-sonnet",        # Critical analysis
-            "docs": "gemini-flash",           # Fast, cheap
+            "requirements": "kimi-k2",        # 🧠 Kimi: Excellent reasoning for analysis
+            "architecture": "kimi-k2",        # 🧠 Kimi: Best for complex architecture decisions
+            "design": "kimi-k2",              # 🧠 Kimi: Great for design systems
+            "code": "qwen-coder",             # 💻 Qwen: BEST code generation, 40x cheaper!
+            "review": "kimi-k2",              # 🧠 Kimi: Critical analysis
+            "docs": "qwen-coder",             # 💻 Qwen: Good enough for docs, super cheap
         }
     
     async def generate(

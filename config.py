@@ -75,7 +75,11 @@ class Settings:
     
     # AI Model Selection (OpenRouter - access to ALL models!)
     OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
-    # Default model for code generation: "qwen-coder" (cheap + excellent) or "claude-sonnet" (best quality)
+    
+    # 🤖 SMART MODEL ROUTING (Kimi thinks, Qwen codes!):
+    # - Kimi K2: Analysis, Planning, Architecture (excellent reasoning)
+    # - Qwen Coder: Code generation (40x cheaper, excellent code)
+    ANALYSIS_MODEL: str = os.getenv("ANALYSIS_MODEL", "kimi-k2")
     CODE_MODEL: str = os.getenv("CODE_MODEL", "qwen-coder")
     
     # TwitterAPI
