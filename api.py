@@ -484,78 +484,45 @@ async def get_available_models():
     }
 
 
-@app.post("/api/test/build-calendar")
-async def test_build_calendar():
-    """
-    TEST: Send fake "urgent tweet" about calendar app to your WhatsApp.
-    
-    YOU reply with "BUILD" to trigger the full Kimi+Qwen pipeline!
-    """
-    from urgent_notifier import UrgentNotifier
-    from whatsapp_handler import whatsapp_handler
+@app.post("/api/test/whatsapp-simple")
+async def test_whatsapp_simple():
+    """Simple WhatsApp test - just sends a basic message."""
     from config import settings
-    from models import Tweet
-    from datetime import datetime
+    import httpx
     
-    # Create fake tweet about calendar app
-    test_tweet = Tweet(
-        id="999888777666555444",
-        text="🚀 IDEA: Build a smart calendar app that automatically schedules my tasks based on priority and energy levels throughout the day. It should sync with Google Calendar and send notifications when I'm about to miss a deadline. Dark mode by default.",
-        created_at=datetime.now(),
-        author_id="123456789",
-        metrics={"likes": 4200, "retweets": 890, "replies": 156}
-    )
+    if not settings.TWILIO_ACCOUNT_SID:
+        return {"error": "Twilio not configured"}
     
-    # Fake high rating (9/10)
-    test_rating = {
-        "score": 9,
-        "category": "productivity",
-        "summary": "Smart calendar with energy-based scheduling - great productivity tool idea",
-        "reason": "Well-defined scope, clear features, solves real problem. Buildable as MVP."
-    }
-    
-    # Store in pending queue (like real urgent tweet)
-    whatsapp_handler.store_pending_tweet(
-        phone=settings.YOUR_PHONE_NUMBER,
-        username="productivity_guru",
-        tweet=test_tweet,
-        rating=test_rating
-    )
-    
-    # Send WhatsApp message with options
-    notifier = UrgentNotifier()
-    
-    test_msg = """🧪 *TEST - Calendar App Idea* 🧪
+    message = """🧪 *TEST MESSAGE*
 
-*From:* @productivity_guru
-*Score:* 9/10 ⭐
+If you see this, WhatsApp is working!
 
-*Content:*
-"Build a smart calendar app that automatically schedules my tasks based on priority and energy levels throughout the day. It should sync with Google Calendar and send notifications when I'm about to miss a deadline. Dark mode by default."
+Reply with:
+• BUILD - to test the build pipeline
+• INTERESTING - to send to Discord
+• NOTHING - to skip
 
-━━━━━━━━━━━━━━━━━━━━━━
-*Reply with:*
-1️⃣ *INTERESTING* → Share to Discord
-2️⃣ *NOTHING* → Skip this tweet
-3️⃣ *BUILD* → 🚀 Create project with Kimi+Qwen!
-━━━━━━━━━━━━━━━━━━━━━━
-
-(This is a test - reply with BUILD to see Kimi K2 + Qwen Coder in action!)"""
+This tests the Kimi+Qwen integration."""
     
     try:
-        await notifier._send_whatsapp_raw(
-            to=settings.YOUR_PHONE_NUMBER,
-            message=test_msg
-        )
-        
-        return {
-            "success": True,
-            "message": "Test message sent! Check WhatsApp and reply with BUILD to trigger the pipeline.",
-            "instructions": "Reply 'BUILD' to your WhatsApp to start the Kimi+Qwen build process!"
-        }
-        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"https://api.twilio.com/2010-04-01/Accounts/{settings.TWILIO_ACCOUNT_SID}/Messages.json",
+                auth=(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN),
+                data={
+                    "From": "whatsapp:+14155238886",
+                    "To": f"whatsapp:{settings.YOUR_PHONE_NUMBER}",
+                    "Body": message
+                }
+            )
+            
+            if response.status_code == 201:
+                return {"success": True, "message": "WhatsApp sent! Check your phone."}
+            else:
+                return {"success": False, "error": f"Twilio error: {response.text}"}
+                
     except Exception as e:
-        logger.error(f"Failed to send test message: {e}")
+        logger.error(f"WhatsApp test failed: {e}")
         return {"success": False, "error": str(e)}
 
 
