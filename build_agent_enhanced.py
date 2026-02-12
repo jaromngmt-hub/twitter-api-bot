@@ -204,36 +204,264 @@ class EnhancedBuildAgent:
     # STAGE 2: PLAN - Architecture & Tech Stack Selection
     # ═══════════════════════════════════════════════════════════════
     
+    # ═══════════════════════════════════════════════════════════════
+    # TECH STACK SELECTION LOGIC - Chooses RIGHT tool for the job
+    # ═══════════════════════════════════════════════════════════════
+    
+    def _detect_project_type(self, requirements: ProjectRequirements) -> str:
+        """
+        Detect project type based on requirements to choose right tech stack.
+        
+        Returns one of:
+        - web_app (Next.js/React)
+        - api_backend (FastAPI/Express)
+        - cli_tool (Python/Go/Rust)
+        - automation_script (Python)
+        - data_analysis (Python/Jupyter)
+        - mobile_app (React Native/Flutter)
+        - ai_ml (Python/TensorFlow)
+        - blockchain (Solidity/Rust)
+        - devops_tool (Go/Python)
+        """
+        text = (requirements.description + ' ' + ' '.join(requirements.core_features)).lower()
+        
+        # Check for CLI indicators
+        if any(kw in text for kw in ['cli', 'command line', 'terminal', 'shell', 'bash']):
+            return 'cli_tool'
+        
+        # Check for automation/scripting
+        if any(kw in text for kw in ['automation', 'script', 'cron', 'scheduler', 'bot', 'scraper']):
+            return 'automation_script'
+        
+        # Check for data/ML
+        if any(kw in text for kw in ['machine learning', 'ml', 'data science', 'pandas', 'jupyter', 'notebook', 'analytics']):
+            return 'data_analysis'
+        
+        # Check for API/backend only (no frontend)
+        if any(kw in text for kw in ['api', 'backend', 'server', 'webhook', 'microservice']) and \
+           not any(kw in text for kw in ['dashboard', 'ui', 'frontend', 'website', 'page']):
+            return 'api_backend'
+        
+        # Check for mobile
+        if any(kw in text for kw in ['mobile', 'ios', 'android', 'app']):
+            return 'mobile_app'
+        
+        # Check for blockchain
+        if any(kw in text for kw in ['blockchain', 'crypto', 'web3', 'smart contract', 'ethereum', 'solana']):
+            return 'blockchain'
+        
+        # Check for DevOps/Infrastructure
+        if any(kw in text for kw in ['docker', 'kubernetes', 'k8s', 'terraform', 'infrastructure', 'deployment']):
+            return 'devops_tool'
+        
+        # Check for AI (but not web UI)
+        if any(kw in text for kw in ['ai', 'llm', 'gpt', 'openai', 'model', 'embedding', 'vector']):
+            return 'ai_ml'
+        
+        # Default to web app (has UI/dashboard)
+        return 'web_app'
+    
+    def _get_recommended_stack(self, project_type: str, requirements: ProjectRequirements) -> Dict:
+        """Get recommended tech stack based on project type."""
+        
+        stacks = {
+            'web_app': {
+                'description': 'Full-stack web application with modern React frontend',
+                'frontend': {
+                    'framework': 'Next.js 14 (App Router)',
+                    'styling': 'Tailwind CSS + shadcn/ui',
+                    'state': 'React hooks + Context or Zustand',
+                    'forms': 'React Hook Form + Zod',
+                },
+                'backend': {
+                    'framework': 'Next.js API routes or FastAPI',
+                    'database': 'PostgreSQL (Supabase/Vercel Postgres)',
+                    'auth': 'NextAuth.js or Clerk',
+                },
+                'deployment': 'Vercel (frontend) + Render/Railway (backend)',
+                'when_to_use': 'User-facing applications with UI',
+            },
+            
+            'api_backend': {
+                'description': 'API-only backend service',
+                'language': 'Python',
+                'framework': 'FastAPI',
+                'database': 'PostgreSQL',
+                'caching': 'Redis',
+                'documentation': 'OpenAPI/Swagger auto-generated',
+                'deployment': 'Render / Railway / Fly.io',
+                'when_to_use': 'Microservices, REST APIs, webhooks',
+            },
+            
+            'cli_tool': {
+                'description': 'Command-line interface tool',
+                'languages': {
+                    'python': 'Click or Typer (best for data/ML tools)',
+                    'go': 'Cobra (best for performance tools)',
+                    'rust': 'clap (best for systems tools)',
+                },
+                'features': [
+                    'Colorized output (rich/tabby)',
+                    'Progress bars',
+                    'Configuration files',
+                    'Shell completion',
+                ],
+                'packaging': 'PyPI (Python), Homebrew (Go/Rust), Cargo (Rust)',
+                'when_to_use': 'Developer tools, system utilities, automation',
+            },
+            
+            'automation_script': {
+                'description': 'Automation script or bot',
+                'language': 'Python',
+                'libraries': [
+                    'requests/aiohttp for HTTP',
+                    'selenium/playwright for browser',
+                    'schedule/APScheduler for cron',
+                    'loguru for logging',
+                ],
+                'deployment': 'GitHub Actions, Render cron, or local',
+                'when_to_use': 'Web scraping, data pipelines, scheduled tasks',
+            },
+            
+            'data_analysis': {
+                'description': 'Data analysis or ML project',
+                'language': 'Python',
+                'libraries': [
+                    'pandas for data manipulation',
+                    'numpy for numerical computing',
+                    'matplotlib/seaborn/plotly for visualization',
+                    'jupyter for notebooks',
+                    'scikit-learn for ML',
+                ],
+                'deployment': 'JupyterHub, Streamlit, or scheduled scripts',
+                'when_to_use': 'Data science, research, analytics',
+            },
+            
+            'mobile_app': {
+                'description': 'Mobile application',
+                'options': {
+                    'react_native': 'Best if web team, cross-platform',
+                    'flutter': 'Best UI consistency, performance',
+                    'swift': 'iOS-only, best native experience',
+                },
+                'when_to_use': 'iOS/Android mobile apps',
+            },
+            
+            'ai_ml': {
+                'description': 'AI/ML model or pipeline',
+                'language': 'Python',
+                'frameworks': [
+                    'PyTorch or TensorFlow for deep learning',
+                    'Hugging Face Transformers for NLP',
+                    'LangChain/LlamaIndex for LLM apps',
+                    'FastAPI for model serving',
+                ],
+                'vector_db': 'Pinecone, Chroma, or pgvector',
+                'deployment': 'Hugging Face, Modal, or self-hosted',
+                'when_to_use': 'Machine learning, AI models, LLM applications',
+            },
+            
+            'blockchain': {
+                'description': 'Blockchain/Web3 application',
+                'smart_contracts': 'Solidity (Ethereum) or Rust (Solana)',
+                'frontend': 'wagmi/viem for Web3 interaction',
+                'testing': 'Hardhat or Foundry',
+                'deployment': 'IPFS + Ethereum/Solana',
+                'when_to_use': 'Smart contracts, dApps, Web3',
+            },
+            
+            'devops_tool': {
+                'description': 'DevOps or infrastructure tool',
+                'languages': {
+                    'go': 'Best for performance-critical tools',
+                    'python': 'Best for AWS/GCP SDK integration',
+                },
+                'common_tools': [
+                    'Docker SDK for container management',
+                    'Kubernetes client for K8s ops',
+                    'Terraform CDK for infrastructure',
+                    'GitHub API for CI/CD automation',
+                ],
+                'when_to_use': 'Infrastructure automation, DevOps tools',
+            },
+        }
+        
+        return stacks.get(project_type, stacks['web_app'])
+    
     async def create_architecture_plan(self, requirements: ProjectRequirements) -> ProjectPlan:
         """
-        Stage 2: PLAN using System Design Primer patterns + Vercel AI SDK for AI projects.
+        Stage 2: PLAN - Choose RIGHT tech stack for the project type.
         
-        Skills: 
-        - SystemArchitectureSkill (System Design Primer)
-        - VercelAISkill (Vercel AI SDK - 10k stars)
+        NOT everything is React/Next.js! We intelligently choose:
+        - Web apps → Next.js/React
+        - APIs → FastAPI
+        - CLI tools → Python/Go/Rust
+        - Scripts → Python
+        - Data/ML → Python + Jupyter
+        - Mobile → React Native/Flutter
+        - AI → Python + PyTorch
+        - Blockchain → Solidity/Rust
+        - DevOps → Go/Python
         """
-        logger.info(f"Stage 2/6: PLAN - Designing architecture")
+        logger.info(f"Stage 2/6: PLAN - Selecting appropriate tech stack")
         
-        # Check if this is an AI project
+        # Detect project type
+        project_type = self._detect_project_type(requirements)
+        logger.info(f"📋 Detected project type: {project_type}")
+        
+        # Get base stack recommendation
+        stack_info = self._get_recommended_stack(project_type, requirements)
+        
+        # Check if AI features (for AI-specific enhancements)
         is_ai_project = VercelAISkill.should_use_ai_sdk(
             requirements.description,
             requirements.core_features
         )
         
-        if is_ai_project:
-            logger.info(f"🤖 AI project detected! Using Vercel AI SDK patterns")
-            return await self._create_ai_architecture_plan(requirements)
-        
-        prompt = SystemArchitectureSkill.design_architecture_prompt({
-            "name": requirements.name,
-            "appetite": getattr(requirements, 'appetite', 'unknown'),
-            "features": requirements.core_features
-        })
+        # Generate architecture with appropriate stack
+        prompt = f"""Design a technical architecture for this project.
+
+Project: {requirements.name}
+Description: {requirements.description}
+Features: {', '.join(requirements.core_features)}
+Detected Type: {project_type}
+
+Recommended Stack:
+{json.dumps(stack_info, indent=2)}
+
+Requirements:
+1. Choose the RIGHT tech stack from recommendations above
+2. Justify why this stack fits the project
+3. Design components appropriate for the project type
+4. Include file structure for the chosen stack
+5. Consider deployment platform
+
+{'Note: This is an AI project - include AI SDK integration (Vercel AI SDK for web, LangChain for Python)' if is_ai_project else ''}
+
+Respond in JSON:
+{{
+    "tech_stack": {{
+        "language": "...",
+        "framework": "...",
+        "database": "... or null",
+        "frontend": "... or null (for non-web)",
+        "deployment": "...",
+        "testing": "...",
+        "ci_cd": "GitHub Actions",
+        "reasoning": "Why this stack..."
+    }},
+    "architecture_pattern": "monolith/microservices/serverless/script",
+    "components": [...],
+    "api_endpoints": [...] (if applicable),
+    "file_structure": {{...}},
+    "estimated_hours": 5,
+    "risks": [...]
+}}"""
 
         response = await self.openai.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": f"You are a staff software architect. Apply patterns from System Design Primer. {SystemArchitectureSkill.SCALABILITY_PATTERNS}"},
+                {"role": "system", "content": f"You are a staff software architect. Choose the RIGHT tool for the job, not always React/Next.js. Consider: simplicity, team expertise, time constraints, and project needs. {SystemArchitectureSkill.SCALABILITY_PATTERNS}"},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.4,
@@ -247,14 +475,14 @@ class EnhancedBuildAgent:
         tech_stack = TechStack(**data["tech_stack"])
         components = [Component(**c) for c in data["components"]]
         
-        logger.info(f"✅ Architecture planned: {data.get('architecture_pattern')} with {len(components)} components")
+        logger.info(f"✅ Architecture planned: {project_type} with {tech_stack.language}/{tech_stack.framework}")
         
         return ProjectPlan(
             requirements=requirements,
             tech_stack=tech_stack,
             components=components,
-            api_endpoints=data["api_endpoints"],
-            data_models=data["data_models"],
+            api_endpoints=data.get("api_endpoints", []),
+            data_models=data.get("data_models", []),
             file_structure=data["file_structure"],
             estimated_hours=data["estimated_hours"],
             risks=data.get("risks", [])
@@ -353,22 +581,44 @@ Respond in JSON with tech_stack, components, api_endpoints, etc."""
     
     async def create_design_docs(self, plan: ProjectPlan) -> Dict[str, str]:
         """
-        Stage 3: DESIGN using shadcn/ui + Tailwind CSS patterns.
+        Stage 3: DESIGN - Choose appropriate design approach based on project type.
         
-        Skill: ShadcnUISkill
-        Source: shadcn-ui/ui (50k stars), tailwindcss (80k stars)
+        - Web apps → shadcn/ui + Tailwind (beautiful UI)
+        - CLI tools → CLI design patterns (colors, layout, help text)
+        - APIs → OpenAPI spec + documentation
+        - Scripts → README + inline docs
+        - Data/ML → Notebook structure + visualization
         """
-        logger.info(f"Stage 3/6: DESIGN - Creating design system using shadcn/ui patterns")
+        logger.info(f"Stage 3/6: DESIGN - Creating appropriate design docs")
         
-        # Check if frontend is needed
-        has_frontend = bool(plan.tech_stack.frontend) or 'next' in plan.tech_stack.framework.lower()
+        # Determine project type from tech stack
+        framework = plan.tech_stack.framework.lower()
+        language = plan.tech_stack.language.lower()
         
-        if has_frontend:
-            logger.info(f"🎨 Frontend detected! Using shadcn/ui + Tailwind design patterns")
+        # Web/Frontend projects
+        if any(fw in framework for fw in ['next', 'react', 'vue', 'angular', 'svelte']):
+            logger.info(f"🎨 Web app detected! Using shadcn/ui + Tailwind patterns")
             return await self._create_frontend_design(plan)
         
-        # Backend-only: use technical writing for API docs
-        return await self._create_backend_design(plan)
+        # CLI tools
+        elif any(kw in framework for kw in ['cli', 'click', 'typer', 'cobra']):
+            logger.info(f"⌨️ CLI tool detected! Using CLI design patterns")
+            return await self._create_cli_design(plan)
+        
+        # Python scripts/automation
+        elif 'script' in framework or (language == 'python' and not plan.tech_stack.frontend):
+            logger.info(f"🐍 Python script detected! Creating script documentation")
+            return await self._create_script_design(plan)
+        
+        # Data/ML projects
+        elif any(kw in framework for kw in ['jupyter', 'pandas', 'ml', 'tensorflow', 'pytorch']):
+            logger.info(f"📊 Data/ML project detected! Using data science patterns")
+            return await self._create_data_design(plan)
+        
+        # Default: API/backend documentation
+        else:
+            logger.info(f"⚙️ Backend/API detected! Creating API documentation")
+            return await self._create_backend_design(plan)
     
     async def _create_frontend_design(self, plan: ProjectPlan) -> Dict[str, str]:
         """Create design docs using shadcn/ui patterns."""
@@ -504,6 +754,218 @@ Generated with shadcn/ui patterns
         docs["COMPONENT_SPECS.md"] = component_specs
         
         logger.info(f"✅ Frontend design system created with shadcn/ui patterns")
+        return docs
+    
+    async def _create_cli_design(self, plan: ProjectPlan) -> Dict[str, str]:
+        """Create design docs for CLI tools."""
+        docs = {}
+        
+        cli_design = f"""# CLI Design: {plan.requirements.name}
+
+## 🖥️ CLI Design Principles
+
+### Command Structure
+```
+{plan.requirements.name} [COMMAND] [OPTIONS] [ARGUMENTS]
+
+Commands:
+  init          Initialize configuration
+  run           Run the main process
+  config        Manage settings
+  status        Show current status
+  help          Show help information
+
+Options:
+  -v, --verbose    Enable verbose output
+  -q, --quiet      Suppress output
+  -c, --config     Path to config file
+  -h, --help       Show help
+  --version        Show version
+```
+
+### Visual Design
+
+**Colors:**
+- Success: Green ✓
+- Error: Red ✗
+- Warning: Yellow ⚠
+- Info: Blue ℹ
+- Highlight: Cyan/Bold
+
+**Progress Indicators:**
+- Spinners for long operations
+- Progress bars for file operations
+- Real-time logs with timestamps
+
+**Output Formats:**
+- Default: Human-readable with colors
+- --json: Machine-readable JSON
+- --csv: CSV for spreadsheets
+- --silent: Exit codes only
+
+### Help Text Template
+
+```
+{plan.requirements.name} v1.0.0
+
+{plan.requirements.description}
+
+USAGE:
+  {plan.requirements.name} [OPTIONS] <command>
+
+COMMANDS:
+  init     Initialize the tool
+  run      Execute main functionality
+  config   Configure settings
+  
+OPTIONS:
+  -h, --help       Show this help message
+  -v, --verbose    Enable verbose logging
+  --version        Show version information
+
+EXAMPLES:
+  {plan.requirements.name} init
+  {plan.requirements.name} run --verbose
+  {plan.requirements.name} config --set key=value
+```
+
+### Error Handling
+
+- Clear error messages
+- Suggested fixes
+- Exit codes:
+  - 0: Success
+  - 1: General error
+  - 2: Invalid arguments
+  - 3: Configuration error
+  - 4: Runtime error
+"""
+        docs["CLI_DESIGN.md"] = cli_design
+        
+        logger.info(f"✅ CLI design documentation created")
+        return docs
+    
+    async def _create_script_design(self, plan: ProjectPlan) -> Dict[str, str]:
+        """Create design docs for Python scripts."""
+        docs = {}
+        
+        script_design = f"""# Script Design: {plan.requirements.name}
+
+## 🐍 Python Script Architecture
+
+### File Structure
+```
+{plan.requirements.name}/
+├── main.py              # Entry point
+├── config.py            # Configuration management
+├── utils/
+│   ├── __init__.py
+│   ├── logging.py       # Loguru setup
+│   └── helpers.py       # Utility functions
+├── core/
+│   ├── __init__.py
+│   └── processor.py     # Main business logic
+├── requirements.txt
+└── README.md
+```
+
+### Design Patterns
+
+**Configuration:**
+- Environment variables for secrets
+- Config files for settings
+- Sensible defaults
+- Validation on startup
+
+**Logging:**
+- Use loguru for structured logging
+- Different levels (DEBUG, INFO, ERROR)
+- Log to file and stdout
+- Rotation for long-running scripts
+
+**Error Handling:**
+- Try/except with specific exceptions
+- Graceful degradation
+- Retry logic for transient failures
+- Clear error messages
+
+**Scheduling (if applicable):**
+- APScheduler for cron-like jobs
+- State persistence between runs
+- Idempotent operations
+- Lock files to prevent duplicates
+"""
+        docs["SCRIPT_DESIGN.md"] = script_design
+        
+        logger.info(f"✅ Script design documentation created")
+        return docs
+    
+    async def _create_data_design(self, plan: ProjectPlan) -> Dict[str, str]:
+        """Create design docs for data/ML projects."""
+        docs = {}
+        
+        data_design = f"""# Data Science Design: {plan.requirements.name}
+
+## 📊 Data/ML Project Structure
+
+### File Organization
+```
+{plan.requirements.name}/
+├── notebooks/              # Jupyter notebooks
+│   ├── 01_exploration.ipynb
+│   ├── 02_preprocessing.ipynb
+│   └── 03_modeling.ipynb
+├── src/
+│   ├── __init__.py
+│   ├── data/
+│   │   ├── __init__.py
+│   │   ├── load.py        # Data loading
+│   │   └── preprocess.py  # Data cleaning
+│   ├── models/
+│   │   ├── __init__.py
+│   │   └── train.py       # Model training
+│   └── utils/
+│       └── visualization.py
+├── data/
+│   ├── raw/               # Original data
+│   ├── processed/         # Cleaned data
+│   └── external/          # Third-party data
+├── outputs/
+│   ├── models/            # Saved models
+│   ├── figures/           # Visualizations
+│   └── reports/           # Analysis reports
+├── requirements.txt
+└── README.md
+```
+
+### Design Principles
+
+**Reproducibility:**
+- Random seeds set
+- Requirements pinned
+- Data version tracking
+- Experiment logging (MLflow/Weights & Biases)
+
+**Modularity:**
+- Separate data, model, and evaluation
+- Config-driven experiments
+- Pipeline approach
+
+**Visualization:**
+- matplotlib/seaborn for static
+- plotly for interactive
+- Clear labels and titles
+- Save high-res figures
+
+**Documentation:**
+- Notebook narratives
+- Docstrings for functions
+- README with setup instructions
+- Results summary
+"""
+        docs["DATA_DESIGN.md"] = data_design
+        
+        logger.info(f"✅ Data/ML design documentation created")
         return docs
     
     async def _create_backend_design(self, plan: ProjectPlan) -> Dict[str, str]:
