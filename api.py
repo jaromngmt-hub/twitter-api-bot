@@ -648,6 +648,41 @@ async def get_available_models():
     }
 
 
+@app.post("/api/migrate")
+async def migrate_database():
+    """Run database migrations (creates missing tables)."""
+    try:
+        import sqlite3
+        from config import settings
+        
+        conn = sqlite3.connect(settings.DATABASE_PATH)
+        cursor = conn.cursor()
+        
+        # Create pending_builds table if missing
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS pending_builds (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                alert_id TEXT UNIQUE NOT NULL,
+                username TEXT NOT NULL,
+                tweet_text TEXT NOT NULL,
+                score INTEGER,
+                category TEXT,
+                reason TEXT,
+                chat_id TEXT NOT NULL,
+                status TEXT DEFAULT 'awaiting_requirements',
+                user_requirements TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+        conn.close()
+        
+        return {"success": True, "message": "Database migrated - pending_builds table created"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 @app.post("/api/test/complete")
 async def test_complete():
     """
