@@ -53,7 +53,7 @@ class Settings:
     
     # Urgent Notifications (Score 9-10 to phone)
     URGENT_NOTIFICATIONS_ENABLED: bool = os.getenv("URGENT_NOTIFICATIONS_ENABLED", "false").lower() == "true"
-    URGENT_MIN_SCORE: int = int(os.getenv("URGENT_MIN_SCORE", "9"))  # Only 9-10 scores
+    URGENT_MIN_SCORE: int = int(os.getenv("URGENT_MIN_SCORE", "7"))  # 7-10 scores (more notifications)
     
     # Twilio (SMS/WhatsApp)
     TWILIO_ACCOUNT_SID: str = os.getenv("TWILIO_ACCOUNT_SID", "")
