@@ -42,6 +42,9 @@ from build_skills import (
     DevOpsSkill,
     VercelAISkill,
     VERCEL_AI_TEMPLATES,
+    ShadcnUISkill,
+    TailwindCSSSkill,
+    StorybookSkill,
 )
 
 
@@ -350,12 +353,162 @@ Respond in JSON with tech_stack, components, api_endpoints, etc."""
     
     async def create_design_docs(self, plan: ProjectPlan) -> Dict[str, str]:
         """
-        Stage 3: DESIGN using Google Technical Writing standards.
+        Stage 3: DESIGN using shadcn/ui + Tailwind CSS patterns.
         
-        Skill: TechnicalWritingSkill
-        Source: Google Technical Writing Course (10k stars)
+        Skill: ShadcnUISkill
+        Source: shadcn-ui/ui (50k stars), tailwindcss (80k stars)
         """
-        logger.info(f"Stage 3/6: DESIGN - Creating docs using Google Technical Writing standards")
+        logger.info(f"Stage 3/6: DESIGN - Creating design system using shadcn/ui patterns")
+        
+        # Check if frontend is needed
+        has_frontend = bool(plan.tech_stack.frontend) or 'next' in plan.tech_stack.framework.lower()
+        
+        if has_frontend:
+            logger.info(f"🎨 Frontend detected! Using shadcn/ui + Tailwind design patterns")
+            return await self._create_frontend_design(plan)
+        
+        # Backend-only: use technical writing for API docs
+        return await self._create_backend_design(plan)
+    
+    async def _create_frontend_design(self, plan: ProjectPlan) -> Dict[str, str]:
+        """Create design docs using shadcn/ui patterns."""
+        docs = {}
+        
+        # 1. Design System Document
+        design_system = f"""# Design System: {plan.requirements.name}
+
+## 🎨 Philosophy
+
+Built with [shadcn/ui](https://ui.shadcn.com) patterns:
+- **Accessible first** - WCAG 2.1 AA compliant
+- **Composition over configuration** - Mix small components
+- **Own your code** - Copy-paste, customize freely
+- **Dark mode ready** - CSS variables for theming
+
+## 🎯 Design Principles
+
+{ShadcnUISkill.DESIGN_PRINCIPLES}
+
+## 🧰 Component Library
+
+### Available Components
+
+"""
+        # Generate component docs based on features
+        for component_name, pattern in ShadcnUISkill.COMPONENT_PATTERNS.items():
+            design_system += f"#### {component_name.title()}\n"
+            if "variants" in pattern:
+                design_system += f"- Variants: {', '.join(pattern['variants'])}\n"
+            if "parts" in pattern:
+                design_system += f"- Parts: {', '.join(pattern['parts'])}\n"
+            if "use_case" in pattern:
+                design_system += f"- Use case: {pattern['use_case']}\n"
+            design_system += "\n"
+        
+        design_system += f"""
+## 🎨 Tailwind CSS Patterns
+
+{ShadcnUISkill.TAILWIND_PATTERNS}
+
+## 📁 File Structure
+
+```
+components/
+├── ui/                    # shadcn/ui components
+│   ├── button.tsx
+│   ├── card.tsx
+│   ├── input.tsx
+│   └── dialog.tsx
+├── layout/                # Layout components
+│   ├── header.tsx
+│   ├── sidebar.tsx
+│   └── footer.tsx
+├── forms/                 # Form components
+│   └── [feature]-form.tsx
+└── [feature]/             # Feature components
+    └── [component].tsx
+
+app/
+├── globals.css            # Global styles + CSS variables
+├── layout.tsx             # Root layout
+└── page.tsx               # Home page
+
+lib/
+└── utils.ts               # cn() utility for Tailwind
+```
+
+## 🌗 Theming
+
+CSS Variables (in `globals.css`):
+
+```css
+:root {{
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4.9%;
+  --primary: 222.2 47.4% 11.2%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222.2 47.4% 11.2%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 222.2 84% 4.9%;
+  --radius: 0.5rem;
+}}
+
+.dark {{
+  --background: 222.2 84% 4.9%;
+  --foreground: 210 40% 98%;
+  /* ... dark mode values */
+}}
+```
+
+## ♿ Accessibility Checklist
+
+- [ ] Keyboard navigation works
+- [ ] Focus indicators visible
+- [ ] ARIA labels present
+- [ ] Color contrast 4.5:1 minimum
+- [ ] Screen reader tested
+- [ ] Reduced motion support
+
+---
+Generated with shadcn/ui patterns
+"""
+        docs["DESIGN_SYSTEM.md"] = design_system
+        
+        # 2. Component Specifications
+        component_specs = "# Component Specifications\n\n"
+        for component in plan.components:
+            if component.type in ["frontend", "ui", "page"]:
+                prompt = ShadcnUISkill.generate_component_prompt(
+                    component.type if component.type != "frontend" else "dashboard",
+                    component.description
+                )
+                component_specs += f"## {component.name}\n\n"
+                component_specs += f"**Type:** {component.type}\n\n"
+                component_specs += f"**Description:** {component.description}\n\n"
+                component_specs += f"**Responsibilities:**\n"
+                for resp in component.responsibilities:
+                    component_specs += f"- {resp}\n"
+                component_specs += "\n---\n\n"
+        docs["COMPONENT_SPECS.md"] = component_specs
+        
+        logger.info(f"✅ Frontend design system created with shadcn/ui patterns")
+        return docs
+    
+    async def _create_backend_design(self, plan: ProjectPlan) -> Dict[str, str]:
+        """Create design docs for backend-only projects."""
+        docs = {}
         
         # API Specification
         if plan.api_endpoints:

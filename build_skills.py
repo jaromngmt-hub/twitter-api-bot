@@ -7,8 +7,14 @@ These define best practices for software engineering.
 
 from typing import Dict, List
 
-# Import Vercel AI SDK skill
+# Import specialized skills
 from vercel_ai_skills import VercelAISkill, VERCEL_AI_TEMPLATES
+from frontend_design_skills import (
+    ShadcnUISkill,
+    TailwindCSSSkill,
+    StorybookSkill,
+    FRONTEND_SKILLS,
+)
 
 
 class RequirementsEngineeringSkill:
