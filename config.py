@@ -71,7 +71,7 @@ class Settings:
     
     # GitHub (for Build Agent)
     GITHUB_TOKEN: str = os.getenv("GITHUB_TOKEN", "")
-    GITHUB_USERNAME: str = os.getenv("GITHUB_USERNAME", "")
+    GITHUB_USERNAME: str = os.getenv("GITHUB_USERNAME", "wacekj700-cmd")  # Your actual username
     
     # AI Model Selection (OpenRouter - access to ALL models!)
     OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
