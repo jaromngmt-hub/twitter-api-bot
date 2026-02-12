@@ -210,6 +210,21 @@ Please respond with:
                 project_name = result["project_name"]
                 github_url = f"https://github.com/{settings.GITHUB_USERNAME}/{project_name}"
                 
+                # ALSO send original tweet to INTERESTING channel
+                webhook = settings.DISCORD_WEBHOOK_INTERESTING
+                if webhook:
+                    try:
+                        async with self.discord:
+                            await self.discord.send_tweet(
+                                webhook, 
+                                username, 
+                                tweet,
+                                note=f"🚀 Built into project: [{project_name}]({github_url})"
+                            )
+                        logger.info(f"Sent built tweet to INTERESTING channel: {project_name}")
+                    except Exception as e:
+                        logger.error(f"Failed to send to INTERESTING: {e}")
+                
                 # Send success message with repo link
                 success_msg = f"""✅ *BUILD COMPLETE!*
 
@@ -224,6 +239,8 @@ Please respond with:
 
 🔗 *GitHub Repo (Private):*
 {github_url}
+
+📨 Also sent to INTERESTING channel!
 
 🚀 Next steps:
 {chr(10).join(result['next_steps'][:3])}

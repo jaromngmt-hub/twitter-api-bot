@@ -89,10 +89,14 @@ class DiscordClient:
         
         return text
     
-    def _build_payload(self, username: str, tweet: Tweet) -> dict:
+    def _build_payload(self, username: str, tweet: Tweet, note: str = None) -> dict:
         """Build Discord webhook payload."""
         # Format text with full content
         description = self._format_tweet_text(tweet)
+        
+        # Add note if provided (e.g., "Built into project: xxx")
+        if note:
+            description = f"{note}\n\n{description}"
         
         # Get first media URL if available
         image_url = tweet.media_urls[0] if tweet.media_urls else None
@@ -125,15 +129,19 @@ class DiscordClient:
         self,
         webhook_url: str,
         username: str,
-        tweet: Tweet
+        tweet: Tweet,
+        note: str = None
     ) -> bool:
         """
         Send a tweet to Discord webhook.
         
+        Args:
+            note: Optional note to add (e.g., "Built into project: xxx")
+        
         Returns True if sent successfully, False otherwise.
         Raises DiscordWebhookError with 404 status for invalid webhooks.
         """
-        payload = self._build_payload(username, tweet)
+        payload = self._build_payload(username, tweet, note)
         
         for attempt in range(settings.DISCORD_RETRY_ATTEMPTS):
             try:
