@@ -248,18 +248,10 @@ Or reply "DEFAULT" to build as-is."""
             try:
                 from build_agent_enhanced import enhanced_build_agent
                 
-                # Enhance the tweet text with user requirements - Kimi will analyze BOTH
-                enhanced_tweet = f"""ORIGINAL TWEET/IDEA:
-{build_data.get('text', '')}
+                # Enhance the tweet text with user requirements
+                enhanced_tweet = f"""Project idea: {build_data.get('text', '')}
 
-USER CUSTOMIZATION REQUIREMENTS (MUST IMPLEMENT):
-{requirements}
-
-INSTRUCTION FOR AI ARCHITECT:
-Analyze BOTH the original tweet AND the user requirements above. 
-Create a project plan that incorporates the user's specific customizations.
-The user requirements override default choices (e.g., if user says "use Qwen", use Qwen not Claude).
-Balance cost vs features based on user priorities stated above."""
+User requirements: {requirements}"""
                 
                 result = await enhanced_build_agent.build_project(
                     tweet_text=enhanced_tweet,
