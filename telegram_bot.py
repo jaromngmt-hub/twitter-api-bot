@@ -235,9 +235,10 @@ Choose option below or type custom instructions:"""
         
         await self.send_message(chat_id, message, reply_markup=keyboard)
         
+        # Return empty message - already sent above, don't duplicate
         return {
             "success": True, 
-            "message": f"Choose DEFAULT or write custom instructions for [{alert_id}]"
+            "message": ""  # Empty - message already sent
         }
     
     async def process_reply(self, action: str, alert_id: str, user_text: str = None, chat_id: int = None) -> Dict:

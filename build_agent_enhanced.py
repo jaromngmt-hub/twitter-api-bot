@@ -1596,6 +1596,18 @@ Built with 🤖 Enhanced Build Agent
             plan, all_files, docs, cicd_files, ai_sdk_files
         )
         
+        # Create GitHub repo and push code
+        repo_url = None
+        if self.github_token and self.github_username:
+            try:
+                repo_url = await self._create_github_repo_and_push(
+                    requirements.name, project_path
+                )
+                logger.info(f"✅ GitHub repo created: {repo_url}")
+            except Exception as e:
+                logger.error(f"Failed to create GitHub repo: {e}")
+                repo_url = None
+        
         logger.info("\n" + "="*60)
         logger.info("BUILD COMPLETE!")
         logger.info("="*60)
@@ -1604,6 +1616,7 @@ Built with 🤖 Enhanced Build Agent
             "success": True,
             "project_name": requirements.name,
             "project_path": project_path,
+            "repo_url": repo_url,
             "tech_stack": {
                 "language": plan.tech_stack.language,
                 "framework": plan.tech_stack.framework,
@@ -1619,9 +1632,12 @@ Built with 🤖 Enhanced Build Agent
             "build_log": build_log,
             "next_steps": [
                 f"cd {project_path}",
-                "git init && git add .",
-                "git commit -m 'Initial commit'",
-                f"gh repo create {requirements.name} --public --source=. --push" if self.github_token else "Create GitHub repo manually",
+                f"git clone {repo_url}" if repo_url else "Repo creation failed - check logs",
+                "Deploy to " + plan.tech_stack.deployment
+            ] if repo_url else [
+                f"cd {project_path}",
+                "git init && git add . && git commit -m 'Initial commit'",
+                f"gh repo create {requirements.name} --public --source=. --push",
                 "Deploy to " + plan.tech_stack.deployment
             ]
         }
@@ -1674,6 +1690,75 @@ Built with 🤖 Enhanced Build Agent
         
         logger.info(f"📁 Project created at: {project_path}")
         return project_path
+    
+    async def _create_github_repo_and_push(self, repo_name: str, project_path: str) -> Optional[str]:
+        """
+        Create GitHub repo via API and push local project.
+        
+        Returns repo URL or None if failed.
+        """
+        import httpx
+        
+        if not self.github_token or not self.github_username:
+            logger.warning("GitHub token or username not configured")
+            return None
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                # Step 1: Create repo via GitHub API
+                logger.info(f"Creating GitHub repo: {repo_name}")
+                create_resp = await client.post(
+                    "https://api.github.com/user/repos",
+                    headers={
+                        "Authorization": f"token {self.github_token}",
+                        "Accept": "application/vnd.github.v3+json"
+                    },
+                    json={
+                        "name": repo_name,
+                        "description": f"Auto-generated project from Twitter Monitor Bot",
+                        "private": False,  # Public repo
+                        "auto_init": False  # We'll push our own files
+                    }
+                )
+                
+                if create_resp.status_code not in (201, 422):  # 422 = repo already exists
+                    logger.error(f"GitHub API error: {create_resp.status_code} - {create_resp.text[:200]}")
+                    return None
+                
+                if create_resp.status_code == 422:
+                    logger.warning(f"Repo {repo_name} might already exist")
+                
+                repo_url = f"https://github.com/{self.github_username}/{repo_name}"
+                logger.info(f"✅ GitHub repo ready: {repo_url}")
+                
+                # Step 2: Initialize git and push
+                import subprocess
+                import os
+                
+                os.chdir(project_path)
+                
+                # Git commands
+                commands = [
+                    ["git", "init"],
+                    ["git", "add", "."],
+                    ["git", "commit", "-m", "Initial commit from AI Build Agent"],
+                    ["git", "branch", "-M", "main"],
+                    ["git", "remote", "add", "origin", f"https://{self.github_token}@github.com/{self.github_username}/{repo_name}.git"],
+                    ["git", "push", "-u", "origin", "main"]
+                ]
+                
+                for cmd in commands:
+                    result = subprocess.run(cmd, capture_output=True, text=True)
+                    if result.returncode != 0:
+                        logger.warning(f"Git command failed: {cmd} - {result.stderr[:100]}")
+                        # Continue anyway, some errors are ok
+                
+                logger.info(f"✅ Code pushed to {repo_url}")
+                return repo_url
+                
+        except Exception as e:
+            logger.error(f"Failed to create/push GitHub repo: {e}")
+            return None
 
 
 # Singleton
