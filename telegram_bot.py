@@ -217,28 +217,23 @@ Choose action ⬇️"""
         except Exception as e:
             logger.error(f"Failed to store pending build: {e}")
         
-        # Send requirements request with DEFAULT button
+        # Return message and keyboard - API will send it (avoid duplicates)
         message = f"""🔨 BUILD: [{alert_id}]
 
 Original idea:
 💬 {pending.get('text', '')[:200]}...
 
-Choose option below or type custom instructions:"""
+Choose option below:"""
 
-        # Keyboard with DEFAULT button + custom input option
-        keyboard = {
-            "inline_keyboard": [
-                [{"text": "✅ DEFAULT (Build as-is)", "callback_data": f"BUILD_DEFAULT:{alert_id}"}],
-                [{"text": "✏️ Write custom instructions", "callback_data": f"BUILD_CUSTOM:{alert_id}"}]
-            ]
-        }
-        
-        await self.send_message(chat_id, message, reply_markup=keyboard)
-        
-        # Return empty message - already sent above, don't duplicate
         return {
-            "success": True, 
-            "message": ""  # Empty - message already sent
+            "success": True,
+            "message": message,
+            "reply_markup": {
+                "inline_keyboard": [
+                    [{"text": "✅ DEFAULT (Build as-is)", "callback_data": f"BUILD_DEFAULT:{alert_id}"}],
+                    [{"text": "✏️ Write custom instructions", "callback_data": f"BUILD_CUSTOM:{alert_id}"}]
+                ]
+            }
         }
     
     async def process_reply(self, action: str, alert_id: str, user_text: str = None, chat_id: int = None) -> Dict:

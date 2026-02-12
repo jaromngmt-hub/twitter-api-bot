@@ -486,11 +486,28 @@ async def telegram_webhook(request: dict):
             else:
                 result = await telegram_bot.process_reply(action, alert_id)
             
-            # Answer callback
-            await telegram_bot.answer_callback(callback["id"], result.get("message", "Done!"))
+            # Handle response - if reply_markup present, edit message with keyboard
+            msg = result.get("message", "Done!")
+            keyboard = result.get("reply_markup")
             
-            # Update message to show action taken
-            await telegram_bot.update_message(chat_id, message_id, action, result, alert_id)
+            if keyboard:
+                # Edit original message with new text and keyboard
+                import httpx
+                async with httpx.AsyncClient() as client:
+                    await client.post(
+                        f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/editMessageText",
+                        json={
+                            "chat_id": chat_id,
+                            "message_id": message_id,
+                            "text": msg,
+                            "reply_markup": keyboard
+                        }
+                    )
+                await telegram_bot.answer_callback(callback["id"], "Choose an option:")
+            else:
+                # Normal response
+                await telegram_bot.answer_callback(callback["id"], msg)
+                await telegram_bot.update_message(chat_id, message_id, action, result, alert_id)
             
             return {"ok": True}
         
