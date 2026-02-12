@@ -59,44 +59,12 @@ class DiscordClient:
         """Truncate text to Discord's limit."""
         if len(text) <= self.MAX_TEXT_LENGTH:
             return text
-        return text[:self.MAX_TEXT_LENGTH - 3] + "..."
-    
-    def _format_tweet_text(self, tweet: Tweet) -> str:
-        """Format tweet text with FULL content, handle RTs properly."""
-        text = tweet.text
-        
-        # Handle retweets - extract and format properly
-        if text.startswith("RT @"):
-            # Format: "RT @username: original text"
-            parts = text.split(": ", 1)
-            if len(parts) == 2:
-                rt_header = parts[0]  # "RT @username"
-                original_text = parts[1]  # the actual tweet
-                
-                # Format as quote-style for clarity
-                text = f"🔁 **{rt_header}**\n\n{original_text}"
-        
-        # Check length - Discord embed limit is 4096
-        # If too long, truncate smartly with link to full tweet
-        if len(text) > self.MAX_TEXT_LENGTH:
-            # Truncate but keep more content
-            truncated = text[:self.MAX_TEXT_LENGTH - 50]
-            # Try to end at a word boundary
-            last_space = truncated.rfind(" ")
-            if last_space > self.MAX_TEXT_LENGTH - 100:
-                truncated = truncated[:last_space]
-            text = truncated + "\n\n... *(truncated - click link for full tweet)*"
-        
-        return text
+        return text[:self.MAX_TEXT_LENGTH-3] + "..."
     
     def _build_payload(self, username: str, tweet: Tweet, note: str = None) -> dict:
         """Build Discord webhook payload."""
-        # Format text with full content
-        description = self._format_tweet_text(tweet)
-        
-        # Add note if provided (e.g., "Built into project: xxx")
-        if note:
-            description = f"{note}\n\n{description}"
+        # Truncate description
+        description = self._truncate_text(tweet.text)
         
         # Get first media URL if available
         image_url = tweet.media_urls[0] if tweet.media_urls else None
@@ -118,10 +86,14 @@ class DiscordClient:
         if image_url:
             embed["image"] = {"url": image_url}
         
+        content = f"🔗 [View on Twitter]({tweet_url})"
+        if note:
+            content = f"{note}\n{content}"
+        
         return {
             "username": f"@{username}",
             "avatar_url": f"https://unavatar.io/twitter/{username}",
-            "content": f"🔗 [View on Twitter]({tweet_url})",  # Direct link
+            "content": content,
             "embeds": [embed]
         }
     
@@ -136,7 +108,7 @@ class DiscordClient:
         Send a tweet to Discord webhook.
         
         Args:
-            note: Optional note to add (e.g., "Built into project: xxx")
+            note: Optional note to add (e.g. "Built into project: xxx")
         
         Returns True if sent successfully, False otherwise.
         Raises DiscordWebhookError with 404 status for invalid webhooks.
@@ -148,26 +120,34 @@ class DiscordClient:
                 response = await self.client.post(webhook_url, json=payload)
                 
                 if response.status_code == 204:
-                    logger.debug(f"Successfully sent tweet {tweet.id} to Discord")
+                    logger.info(f"Discord notification sent for @{username}")
                     return True
                 
                 elif response.status_code == 404:
-                    logger.error(f"Webhook not found (404): {webhook_url}")
-                    raise DiscordWebhookError(f"Webhook not found (404)")
+                    # Webhook doesn't exist - raise specific error
+                    raise DiscordWebhookError(
+                        f"Discord webhook returned 404 - webhook may have been deleted. "
+                        f"URL: {webhook_url[:50]}..."
+                    )
+                
+                elif response.status_code == 429:
+                    # Rate limited
+                    retry_after = int(response.headers.get('Retry-After', 5))
+                    logger.warning(f"Discord rate limited, waiting {retry_after}s...")
+                    await asyncio.sleep(retry_after)
+                    continue
                 
                 elif 500 <= response.status_code < 600:
-                    # Server error - retry
+                    # Server error, retry
                     if attempt < settings.DISCORD_RETRY_ATTEMPTS - 1:
                         logger.warning(
-                            f"Discord server error {response.status_code}, "
-                            f"retrying in {settings.DISCORD_RETRY_DELAY}s..."
+                            f"Discord server error {response.status_code}, retrying..."
                         )
                         await asyncio.sleep(settings.DISCORD_RETRY_DELAY)
                         continue
                     else:
                         logger.error(
-                            f"Discord server error after {settings.DISCORD_RETRY_ATTEMPTS} attempts: "
-                            f"{response.status_code}"
+                            f"Discord server error {response.status_code} after all retries"
                         )
                         return False
                 
@@ -194,3 +174,53 @@ class DiscordClient:
                 return False
         
         return False
+    
+    async def send_interesting(
+        self,
+        username: str,
+        tweet_text: str,
+        score: int,
+        reason: str = "User marked as INTERESTING"
+    ) -> bool:
+        """Send an 'interesting' tweet to Discord."""
+        from datetime import datetime
+        
+        webhook_url = settings.DISCORD_WEBHOOK_INTERESTING
+        if not webhook_url:
+            logger.warning("No INTERESTING webhook configured")
+            return False
+        
+        # Create a minimal Tweet-like object
+        class FakeTweet:
+            def __init__(self, text):
+                self.text = text
+                self.id = "unknown"
+                self.created_at = datetime.now()
+                self.likes = 0
+                self.retweets = 0
+                self.replies = 0
+                self.media_urls = []
+        
+        fake_tweet = FakeTweet(tweet_text)
+        
+        payload = {
+            "username": "Twitter Monitor",
+            "avatar_url": self.AVATAR_URL,
+            "content": f"📌 INTERESTING from Telegram | Score: {score}/10",
+            "embeds": [{
+                "description": tweet_text[:3900],
+                "color": 3447003,  # Blue
+                "footer": {"text": f"@{username} | {reason}"}
+            }]
+        }
+        
+        try:
+            response = await self.client.post(webhook_url, json=payload)
+            return response.status_code == 204
+        except Exception as e:
+            logger.error(f"Failed to send to INTERESTING channel: {e}")
+            return False
+
+
+# Global instance
+discord_client = DiscordClient()
