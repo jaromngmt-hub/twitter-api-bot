@@ -15,6 +15,12 @@ from frontend_design_skills import (
     StorybookSkill,
     FRONTEND_SKILLS,
 )
+from react_skills import (
+    VercelReactSkill,
+    EpicReactSkill,
+    TotalTypeScriptSkill,
+    REACT_SKILLS,
+)
 
 
 class RequirementsEngineeringSkill:
