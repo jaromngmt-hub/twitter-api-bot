@@ -412,7 +412,9 @@ async def get_pending_tweets():
 async def get_rate_limit_status():
     """Get notification rate limiter status."""
     from rate_limiter import rate_limiter
-    return rate_limiter.get_status()
+    status = rate_limiter.get_status()
+    queue = await rate_limiter.get_queue_status()
+    return {"rate_limit": status, "queue": queue}
 
 
 if __name__ == "__main__":

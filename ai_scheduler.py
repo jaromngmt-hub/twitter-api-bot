@@ -337,53 +337,81 @@ class AIScheduler:
         
         logger.info("AI monitoring cycle completed")
     
-    async def _send_batch_notifications(self):
-        """Background task to send queued notifications after cooldown."""
+    async def _process_notification_queue(self):
+        """Background task to process queued notifications one by one."""
         while self.running:
-            await asyncio.sleep(60)  # Check every minute
+            await asyncio.sleep(30)  # Check every 30 seconds
             
             if not self.running:
                 break
             
-            status = rate_limiter.get_status()
-            
-            # If cooldown expired and we have queued tweets
-            if not status["in_cooldown"] and status["queue_size"] > 0:
-                summary = await rate_limiter.get_queued_summary()
-                if not summary:
-                    continue
+            try:
+                status = rate_limiter.get_status()
                 
-                logger.info(f"Sending batch notification for {summary['total']} queued tweets")
+                # Check if we can send next notification
+                if status["in_delay_period"]:
+                    continue  # Wait more
                 
-                try:
-                    async with UrgentNotifier() as notifier:
-                        if notifier.is_configured():
-                            # Build batch message
-                            message = f"""📦 *BATCH ALERT: {summary['total']} URGENT TWEETS*
-
-While you were away, {summary['total']} high-value tweets were detected:
-
-"""
-                            for i, tweet in enumerate(summary['top_tweets'][:3], 1):
-                                message += f"{i}. *@{tweet['username']}* ({tweet['score']}/10)\n"
-                                message += f"   {tweet['summary'][:80]}...\n\n"
+                # Get next tweet from queue
+                next_tweet = await rate_limiter.get_next_tweet()
+                if not next_tweet:
+                    continue  # Queue empty
+                
+                logger.info(
+                    f"Processing queued tweet from @{next_tweet.username} "
+                    f"({next_tweet.score}/10), {status['queue_size']} remaining in queue"
+                )
+                
+                # Send notification
+                async with UrgentNotifier() as notifier:
+                    if notifier.is_configured():
+                        notify_result = await notifier.send_urgent_notification(
+                            next_tweet.username,
+                            None,  # We'll pass text directly
+                            {
+                                "score": next_tweet.score,
+                                "category": next_tweet.category,
+                                "summary": next_tweet.summary,
+                                "reason": next_tweet.reason
+                            }
+                        )
+                        
+                        if notify_result["sent"]:
+                            await rate_limiter.mark_notification_sent()
                             
-                            if summary['total'] > 3:
-                                message += f"_...and {summary['total'] - 3} more_\n\n"
-                            
-                            message += f"Average score: {summary['avg_score']}/10\n"
-                            message += "Check Discord for full details!"
-                            
-                            await notifier._send_whatsapp_raw(
-                                to=settings.YOUR_PHONE_NUMBER,
-                                message=message
+                            # Create a temporary tweet object for pending storage
+                            from models import Tweet
+                            temp_tweet = Tweet(
+                                id=next_tweet.tweet_id,
+                                text=next_tweet.text,
+                                created_at=datetime.now(),
+                                author_id="0",
+                                metrics={}
                             )
                             
-                            await rate_limiter.mark_notification_sent()
-                            logger.info("Batch notification sent")
+                            # Store for user reply
+                            whatsapp_handler.store_pending_tweet(
+                                phone=settings.YOUR_PHONE_NUMBER,
+                                username=next_tweet.username,
+                                tweet=temp_tweet,
+                                rating={
+                                    "score": next_tweet.score,
+                                    "category": next_tweet.category,
+                                    "summary": next_tweet.summary,
+                                    "reason": next_tweet.reason
+                                }
+                            )
                             
-                except Exception as e:
-                    logger.error(f"Failed to send batch notification: {e}")
+                            logger.info(
+                                f"🚨 Queued notification sent for @{next_tweet.username} "
+                                f"({next_tweet.score}/10), next in {rate_limiter.MIN_DELAY_MINUTES}min"
+                            )
+                        else:
+                            logger.error(f"Failed to send queued notification: {notify_result}")
+                            # Re-queue? For now, log and continue
+                            
+            except Exception as e:
+                logger.error(f"Error in notification queue processor: {e}")
     
     async def run(self) -> None:
         """Run continuous AI-powered monitoring loop."""
@@ -401,10 +429,10 @@ While you were away, {summary['total']} high-value tweets were detected:
             logger.info(f"Urgent Notifications: {'ENABLED' if settings.URGENT_NOTIFICATIONS_ENABLED else 'DISABLED'}")
             if settings.URGENT_NOTIFICATIONS_ENABLED:
                 logger.info(f"  → Min score for phone alert: {settings.URGENT_MIN_SCORE}")
-                logger.info(f"  → Rate limit: 1 per {rate_limiter.COOLDOWN_MINUTES}min + batching")
+                logger.info(f"  → Sequential mode: 1 per {rate_limiter.MIN_DELAY_MINUTES}min (no batching)")
         
-        # Start background batch notification task
-        batch_task = asyncio.create_task(self._send_batch_notifications())
+        # Start background sequential notification processor
+        queue_processor = asyncio.create_task(self._process_notification_queue())
         
         try:
             while self.running:
@@ -434,7 +462,7 @@ While you were away, {summary['total']} high-value tweets were detected:
         
         finally:
             self.running = False
-            batch_task.cancel()
+            queue_processor.cancel()
             logger.info("AI scheduler stopped")
     
     def _signal_handler(self) -> None:
