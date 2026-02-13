@@ -43,8 +43,8 @@ class DiscordVerifierAgent:
     - Newsy (tylko ważne)
     """
     
-    MIN_LENGTH = 50  # Min długość tweeta
-    MIN_LIKES = 10   # Min polubień
+    MIN_LENGTH = 30  # Min długość tweeta (niżej - nowe tweety też OK)
+    # MIN_LIKES usunięte - nowe wartościowe tweety mogą mieć mało likes
     
     def __init__(self):
         self.enabled = True
@@ -60,18 +60,21 @@ class DiscordVerifierAgent:
         if tweet.text.startswith("@"):
             return False, "Odpowiedź - pomijamy"
         
-        # 3. Too short
+        # 3. Too short (but allow if high quality content)
         if len(tweet.text) < self.MIN_LENGTH:
             return False, f"Za krótki ({len(tweet.text)} znaków)"
         
-        # 4. Too low engagement
-        if tweet.likes < self.MIN_LIKES:
-            return False, f"Za mało likes ({tweet.likes})"
+        # 4. Only links with NO context (like just "https://..." without explanation)
+        # Allow links WITH context (explanation of what it is)
+        words = tweet.text.split()
+        link_count = sum(1 for w in words if w.startswith('http') or 't.co' in w)
+        text_words = [w for w in words if not w.startswith('http') and 't.co' not in w]
         
-        # 5. Only links/media (no text)
-        text_clean = tweet.text.replace("http", "").replace("www", "").strip()
-        if len(text_clean) < 30:
-            return False, "Brak treści (tylko linki/media)"
+        if link_count > 0 and len(text_words) < 5:
+            # Just a link with 0-4 words of context = spam
+            return False, "Tylko link bez opisu (spam)"
+        
+        # 5. Allow all other tweets - let AI decide
         
         return True, "OK - przechodzi do AI"
     
@@ -98,31 +101,49 @@ class DiscordVerifierAgent:
     async def _ai_verify(self, tweet: Tweet, username: str) -> VerificationResult:
         """AI analiza jakości tweeta."""
         
-        prompt = f"""Analyze this tweet and determine if it should be sent to Discord.
+        prompt = f"""You are a content curator. Analyze this tweet CAREFULLY.
 
 Tweet from @{username}:
 "{tweet.text}"
 
 Metrics: ❤️ {tweet.likes} | 🔁 {tweet.retweets} | 💬 {tweet.replies}
 
-Evaluate:
-1. Is this ORIGINAL content (not quote, not reply thread)?
-2. Does it provide VALUE (insights, tips, analysis, news)?
-3. Is it WELL-WRITTEN (clear, coherent, not shitposting)?
-4. Is it RELEVANT (tech/business/crypto/AI, not personal life)?
+IMPORTANT: Many accounts post VALUABLE insights, tips, strategies, analysis. 
+DON'T miss them! Be GENEROUS with approval.
+
+APPROVE (should_send: true) if tweet is:
+✓ Original insight, lesson learned, strategy
+✓ Tutorial, how-to, guide, playbook
+✓ Analysis, breakdown, case study
+✓ Useful tool, resource, recommendation
+✓ Industry news with context
+✓ Thought-provoking question/discussion
+✓ Personal experience with lesson
+✓ Data, statistics, research findings
+
+REJECT (should_send: false) only if:
+✗ Pure retweet (RT @user)
+✗ Simple reply (@user thanks/cool/agreed)
+✗ Personal life update (food, travel, mood)
+✗ Meme/shitpost without value
+✗ Just a link with zero context
+✗ Duplicate/spam content
 
 CATEGORIES:
-- "ai" - AI/ML, LLMs, automation
-- "crypto" - crypto, blockchain, DeFi
-- "business" - startups, marketing, sales
-- "tech" - programming, tools, SaaS
-- "productivity" - habits, workflows
-- "filtered" - low quality, skip
+- "ai" - AI/ML, LLMs, ChatGPT, automation, prompts
+- "crypto" - crypto, blockchain, DeFi, trading, Web3
+- "business" - startups, marketing, sales, growth, monetization
+- "tech" - programming, SaaS, dev tools, open source
+- "productivity" - habits, systems, workflows, focus
+- "content" - writing, social media, audience building
+- "filtered" - reject only if truly worthless
+
+BE GENEROUS! Better to approve good content than miss it!
 
 RESPONSE FORMAT (JSON):
 {{
   "should_send": true/false,
-  "reason": "One sentence why",
+  "reason": "Why - what value does it provide?",
   "quality_score": 0-10,
   "category": "category_name",
   "is_original_content": true/false
