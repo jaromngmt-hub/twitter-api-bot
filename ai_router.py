@@ -91,14 +91,6 @@ CODING_MODELS = {
         output_price=0.38,
         context=163840
     ),
-    "gpt-5-nano": ModelConfig(
-        id="openai/gpt-5-nano",
-        name="GPT-5 Nano",
-        strength="Ultra cheap analysis & verification - best for filtering",
-        input_price=0.05,
-        output_price=0.40,
-        context=400000
-    ),
     "minimax-m2.1": ModelConfig(
         id="minimax/minimax-m2.1",
         name="MiniMax M2.1",
