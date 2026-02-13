@@ -10,7 +10,7 @@ services:
       - key: CHECK_INTERVAL_SECONDS
         value: "14400"  # 4 hours
       - key: MAX_TWEETS_PER_CHECK
-        value: "5"
+        value: "20"
       - key: LOG_LEVEL
         value: "INFO"
       - key: PYTHONUNBUFFERED
