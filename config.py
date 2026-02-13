@@ -19,8 +19,9 @@ class Settings:
     # OpenAI (for tweet analysis)
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     
-    # Database
-    DATABASE_PATH: str = os.getenv("DATABASE_PATH", "./monitor.db")
+    # Database (PostgreSQL Supabase or SQLite fallback)
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "")
+    DATABASE_PATH: str = os.getenv("DATABASE_PATH", "./monitor.db")  # Fallback for SQLite
     
     # Monitoring (default: 30 minutes = 1800 seconds)
     CHECK_INTERVAL_SECONDS: int = int(os.getenv("CHECK_INTERVAL_SECONDS", "1800"))
