@@ -22,6 +22,9 @@ class VerificationResult:
     quality_score: int  # 0-10
     category: str  # ai, crypto, business, tech, etc.
     is_original_content: bool
+    market_potential: str = "none"  # high/medium/low/none
+    pioneer_opportunity: bool = False
+    build_alternative: Optional[str] = None
     
 
 class DiscordVerifierAgent:
@@ -120,6 +123,13 @@ APPROVE (should_send: true) if tweet is:
 ✓ Thought-provoking question/discussion
 ✓ Personal experience with lesson
 ✓ Data, statistics, research findings
+✓ **Early product idea with market validation potential**
+
+PIONEER OPPORTUNITY - Give HIGHER score if:
+🔥 Is this something people would WANT TO USE or PAY FOR?
+🔥 Even if incomplete, can we build an alternative/improved version?
+🔥 Is this validating market demand ("thinking to build", "would you use")?
+🔥 Can we be FIRST to build what they're discussing?
 
 REJECT (should_send: false) only if:
 ✗ Pure retweet (RT @user)
@@ -146,7 +156,10 @@ RESPONSE FORMAT (JSON):
   "reason": "Why - what value does it provide?",
   "quality_score": 0-10,
   "category": "category_name",
-  "is_original_content": true/false
+  "is_original_content": true/false,
+  "market_potential": "high/medium/low/none",
+  "pioneer_opportunity": true/false,
+  "build_alternative": "Can we build better version? Brief idea or null"
 }}"""
 
         try:
@@ -173,7 +186,10 @@ RESPONSE FORMAT (JSON):
                 reason=data.get("reason", "AI verification"),
                 quality_score=data.get("quality_score", 0),
                 category=data.get("category", "filtered"),
-                is_original_content=data.get("is_original_content", False)
+                is_original_content=data.get("is_original_content", False),
+                market_potential=data.get("market_potential", "none"),
+                pioneer_opportunity=data.get("pioneer_opportunity", False),
+                build_alternative=data.get("build_alternative")
             )
             
         except Exception as e:
@@ -184,7 +200,10 @@ RESPONSE FORMAT (JSON):
                 reason=f"AI error, basic filters passed: {e}",
                 quality_score=5,
                 category="unknown",
-                is_original_content=True
+                is_original_content=True,
+                market_potential="unknown",
+                pioneer_opportunity=False,
+                build_alternative=None
             )
 
 

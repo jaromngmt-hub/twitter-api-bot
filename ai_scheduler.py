@@ -226,6 +226,7 @@ class AIScheduler:
                             logger.error(f"WhatsApp error: {e}")
                 
                 # 5-7: MEDIUM VALUE → Discord (with AI verification)
+                # OR Telegram with BUILD if pioneer opportunity!
                 else:
                     logger.info(f"📊 MEDIUM tweet from @{user.username} (score: {rating.score}/10) → Discord verification")
                     
@@ -234,27 +235,48 @@ class AIScheduler:
                         verification = await discord_verifier.verify(tweet, user.username)
                         
                         if verification.should_send:
-                            result = await discord.send_tweet(
-                                user.username,
-                                tweet,
-                                {
-                                    "score": rating.score,
-                                    "category": verification.category,
-                                    "summary": rating.summary,
-                                    "action": "send",
-                                    "reason": f"AI verified: {verification.reason}"
-                                }
+                            # CHECK: Is this a pioneer opportunity with market potential?
+                            is_pioneer = (
+                                verification.pioneer_opportunity or 
+                                verification.market_potential in ["high", "medium"] or
+                                (verification.build_alternative and len(verification.build_alternative) > 10)
                             )
                             
-                            if result["sent"]:
-                                db.record_sent_tweet(
-                                    tweet_id=tweet.id,
+                            if is_pioneer and settings.USE_TELEGRAM:
+                                # 🔥 PIONEER OPPORTUNITY → Telegram with BUILD buttons!
+                                logger.info(f"🔥 PIONEER OPPORTUNITY! @{user.username} - sending to Telegram with BUILD")
+                                
+                                # Create enhanced tweet text with opportunity note
+                                enhanced_text = f"{tweet.text}\n\n💡 Opportunity: {verification.build_alternative or 'Build alternative version'}"
+                                
+                                # Send to Telegram with buttons
+                                telegram_result = await telegram_bot.send_urgent_tweet(
                                     username=user.username,
-                                    channel_id=user.channel_id,
-                                    text=tweet.text,
-                                    created_at=tweet.created_at
+                                    text=enhanced_text,
+                                    url=tweet.url,
+                                    metrics={
+                                        "likes": tweet.likes,
+                                        "retweets": tweet.retweets,
+                                        "replies": tweet.replies
+                                    }
                                 )
-                                logger.info(f"📨 Discord: {verification.category} tweet (score {rating.score}) - {verification.reason}")
+                                
+                                if telegram_result.get("success"):
+                                    db.record_sent_tweet(
+                                        tweet_id=tweet.id,
+                                        username=user.username,
+                                        channel_id=user.channel_id,
+                                        text=tweet.text,
+                                        created_at=tweet.created_at
+                                    )
+                                    logger.info(f"🚀 Telegram BUILD: Pioneer opportunity from @{user.username}")
+                                else:
+                                    # Fallback to Discord
+                                    await send_to_discord()
+                            else:
+                                # Standard → Discord
+                                await send_to_discord()
+                                
                         else:
                             logger.info(f"🚫 Discord rejected: {verification.reason}")
                             
