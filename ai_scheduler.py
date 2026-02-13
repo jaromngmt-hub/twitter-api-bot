@@ -162,34 +162,14 @@ class AIScheduler:
             
             # Route tweets based on AI score
             if self.enable_ai and rating:
-                # 0-1: Filter completely (useless)
-                if rating.score < 2:
+                # 0-6: Filter completely (useless)
+                if rating.score < 7:
                     logger.info(f"🗑️ Tweet from @{user.username} filtered (score: {rating.score}/10)")
                     continue
                 
-                # 2-7: Send to Discord (categorized by topic: AI, CRYPTO, etc.)
-                elif rating.score < 8:
-                    result = await discord.send_tweet(
-                        user.username,
-                        tweet,
-                        {"score": rating.score, "category": rating.category, 
-                         "summary": rating.summary, "action": rating.action, 
-                         "reason": rating.reason}
-                    )
-                    
-                    if result["sent"]:
-                        db.record_sent_tweet(
-                            tweet_id=tweet.id,
-                            username=user.username,
-                            channel_id=user.channel_id,
-                            text=tweet.text,
-                            created_at=tweet.created_at
-                        )
-                        logger.info(f"📨 Sent to Discord: {rating.category} tweet (score {rating.score}) from @{user.username}")
-                
-                # 8-10: WhatsApp for user decision (ALL categories go here)
+                # 7-10: Send to Telegram for user decision (BUILD/INTERESTING/NOTHING)
                 else:
-                    logger.info(f"🚨 HIGH VALUE tweet from @{user.username} (score: {rating.score}/10) → WhatsApp")
+                    logger.info(f"🚨 HIGH VALUE tweet from @{user.username} (score: {rating.score}/10) → Telegram")
                     
                     # Send WhatsApp notification for user to decide
                     if urgent_notifier:
