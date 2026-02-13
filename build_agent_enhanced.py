@@ -145,9 +145,28 @@ class EnhancedBuildAgent:
         self.projects_dir = "./projects"
         os.makedirs(self.projects_dir, exist_ok=True)
         
-        # Log which model we're using for code
-        code_model = settings.CODE_MODEL if hasattr(settings, 'CODE_MODEL') else 'qwen-coder'
-        logger.info(f"BuildAgent initialized - Using {code_model} for code generation (40x cheaper than GPT-4o!)")
+        logger.info(f"BuildAgent initialized - DeepSeek for standard builds, MiniMax M2.5 for complex builds")
+    
+    def _select_code_task_type(self, plan: ProjectPlan) -> str:
+        """
+        Select coding model based on project complexity.
+        
+        Simple builds (estimated_hours <= 15, few components) -> DeepSeek (cheap)
+        Complex builds (estimated_hours > 15, many components) -> MiniMax M2.5 (premium quality)
+        """
+        is_complex = (
+            plan.estimated_hours > 15 or 
+            len(plan.components) > 5 or
+            len(plan.api_endpoints) > 10 or
+            len(plan.risks) > 3
+        )
+        
+        if is_complex:
+            logger.info(f"🔥 COMPLEX BUILD detected ({plan.estimated_hours}h, {len(plan.components)} components) -> Using MiniMax M2.5 (premium)")
+            return "code-premium"
+        else:
+            logger.info(f"📦 Standard build ({plan.estimated_hours}h, {len(plan.components)} components) -> Using DeepSeek (cheap)")
+            return "code"
     
     # ═══════════════════════════════════════════════════════════════
     # STAGE 1: ANALYZE - Extract structured requirements from tweet
@@ -1056,10 +1075,12 @@ Tests should FAIL initially (we haven't written the code yet).
 
 Only output the test code."""
 
-        # Use AI Router with QWEN CODER for tests (cheap + excellent!)
+        # Select model based on project complexity
+        task_type = self._select_code_task_type(plan)
+        
         content = await self.ai_router.generate(
             prompt=prompt,
-            task_type="code",
+            task_type=task_type,
             temperature=0.3,
             max_tokens=2000
         )
@@ -1091,15 +1112,17 @@ Requirements:
 
 Only output the implementation code."""
 
-        # Use AI Router with QWEN CODER for implementation (cheap + excellent code!)
+        # Select model based on project complexity
+        task_type = self._select_code_task_type(plan)
+        
         content = await self.ai_router.generate(
             prompt=prompt,
-            task_type="code",
+            task_type=task_type,
             temperature=0.3,
             max_tokens=2500
         )
         
-        return self._clean_code(response.choices[0].message.content)
+        return self._clean_code(content)
     
     # ═══════════════════════════════════════════════════════════════
     # STAGE 5: REVIEW - Code Review & Security Scan
@@ -1138,6 +1161,58 @@ Only output the implementation code."""
             security_concerns=data.get("security_concerns", []),
             passed=data["passed"]
         )
+    
+    async def fix_code_issues(self, files: List[CodeFile], review: ReviewResult, plan: ProjectPlan) -> List[CodeFile]:
+        """
+        Fix code issues found during review using MiniMax M2.1.
+        
+        Uses MiniMax M2.1 for fast, high-quality fixes.
+        """
+        if review.passed or not review.issues:
+            return files
+        
+        logger.info(f"🔧 Fixing {len(review.issues)} issues using MiniMax M2.1...")
+        
+        fixed_files = []
+        for file in files:
+            # Find issues for this file
+            file_issues = [i for i in review.issues if file.path in i.get('file', '')]
+            
+            if not file_issues:
+                fixed_files.append(file)
+                continue
+            
+            prompt = f"""Fix these issues in the code:
+
+File: {file.path}
+Issues:
+{chr(10).join([f"- {i['message']} (line {i.get('line', 'N/A')})" for i in file_issues])}
+
+Current code:
+```
+{file.content}
+```
+
+Return only the fixed code."""
+
+            # Use MiniMax M2.1 for fixes (fast & good quality)
+            fixed_content = await self.ai_router.generate(
+                prompt=prompt,
+                task_type="code-fix",
+                temperature=0.3,
+                max_tokens=2500
+            )
+            
+            fixed_files.append(CodeFile(
+                path=file.path,
+                content=self._clean_code(fixed_content),
+                language=file.language,
+                purpose=file.purpose,
+                tests=file.tests
+            ))
+        
+        logger.info(f"✅ Fixed issues in {len(files)} files")
+        return fixed_files
     
     # ═══════════════════════════════════════════════════════════════
     # STAGE 6: DEPLOY - CI/CD Pipeline
@@ -1582,6 +1657,12 @@ Built with 🤖 Enhanced Build Agent
         logger.info("="*60)
         review = await self.review_code(all_files, plan)
         build_log.append(f"✅ Reviewed: Score {review.score}/10, Passed: {review.passed}")
+        
+        # Fix issues if review failed
+        if not review.passed and review.issues:
+            logger.info(f"⚠️ Review found {len(review.issues)} issues - fixing with MiniMax M2.1...")
+            all_files = await self.fix_code_issues(all_files, review, plan)
+            build_log.append(f"🔧 Fixed {len(review.issues)} issues with MiniMax M2.1")
         
         # Stage 6: DEPLOY
         logger.info("\n" + "="*60)

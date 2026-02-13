@@ -76,12 +76,44 @@ CODING_MODELS = {
         context=262144
     ),
     "deepseek-coder": ModelConfig(
-        id="deepseek/deepseek-chat",
-        name="DeepSeek V3",
-        strength="Great coding, very cheap, good for long contexts",
-        input_price=0.14,
-        output_price=0.28,
-        context=64000
+        id="deepseek/deepseek-v3.2",
+        name="DeepSeek V3.2 (via DeepInfra)",
+        strength="Best coding quality, slightly more expensive than V3",
+        input_price=0.26,
+        output_price=0.38,
+        context=163840
+    ),
+    "deepseek-v3.2": ModelConfig(
+        id="deepseek/deepseek-v3.2",
+        name="DeepSeek V3.2",
+        strength="Analysis & verification - cheap for content filtering",
+        input_price=0.25,
+        output_price=0.38,
+        context=163840
+    ),
+    "gpt-5-nano": ModelConfig(
+        id="openai/gpt-5-nano",
+        name="GPT-5 Nano",
+        strength="Ultra cheap analysis & verification - best for filtering",
+        input_price=0.05,
+        output_price=0.40,
+        context=400000
+    ),
+    "minimax-m2.1": ModelConfig(
+        id="minimax/minimax-m2.1",
+        name="MiniMax M2.1",
+        strength="Fast coding alternative to DeepSeek",
+        input_price=0.27,
+        output_price=0.95,
+        context=196608
+    ),
+    "minimax-m2.5": ModelConfig(
+        id="minimax/minimax-m2.5",
+        name="MiniMax M2.5",
+        strength="SOTA coding - best quality for complex projects",
+        input_price=0.30,
+        output_price=1.20,
+        context=204800
     ),
     
     # 🔄 FALLBACK MODELS
@@ -128,8 +160,10 @@ class AIRouter:
             "architecture": "kimi-k2.5",      # 🧠 Kimi K2.5: Best for complex architecture
             "design": "kimi-k2.5",            # 🧠 Kimi K2.5: Great for design systems
             "code": "deepseek-coder",         # 💻 DeepSeek: FAST + CHEAP + GOOD!
+            "code-premium": "minimax-m2.5",   # ⭐ MiniMax M2.5: SOTA quality for complex builds
+            "code-fix": "minimax-m2.1",         # 🔧 MiniMax M2.1: Fast fixes after review
             "review": "kimi-k2.5",            # 🧠 Kimi K2.5: Critical analysis
-            "analysis": "deepseek-coder",     # 💻 DeepSeek: CHEAP analysis (was Kimi - too expensive!)
+            "analysis": "gpt-5-nano",         # 🚀 GPT-5 Nano: ULTRA CHEAP analysis - $0.05/1M tokens!
             "docs": "deepseek-coder",         # 💻 DeepSeek: Fast for docs
         }
     
