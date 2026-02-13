@@ -175,43 +175,42 @@ class AIScheduler:
                 
                 # 2-10: Send to Discord (all decent tweets)
                 # 5-10: Also send to Telegram (good+ tweets)
-                # Score 2-4: Discord only
-                # Score 5-10: Discord + Telegram
                 
-                # First send to Discord (score 2+)
-                if rating.score >= 2:
-                    logger.info(f"🚨 GOOD VALUE tweet from @{user.username} (score: {rating.score}/10) → Telegram (score 5+)")
-                    
-                    # ALWAYS send to Telegram for high value tweets
-                    telegram_sent = False
-                    if settings.USE_TELEGRAM:
-                        try:
-                            from telegram_bot import telegram_bot
-                            telegram_result = await telegram_bot.send_urgent_tweet(
-                                username=user.username,
-                                text=tweet.text,
-                                url=tweet.url,
-                                metrics={
-                                    "likes": tweet.likes,
-                                    "retweets": tweet.retweets,
-                                    "replies": tweet.replies
-                                }
-                            )
-                            if telegram_result.get("success"):
-                                logger.info(f"📱 Telegram sent for HIGH VALUE tweet @{user.username}")
-                                telegram_sent = True
-                                db.record_sent_tweet(
-                                    tweet_id=tweet.id,
-                                    username=user.username,
-                                    channel_id=user.channel_id,
-                                    text=tweet.text,
-                                    created_at=tweet.created_at
-                                )
-                        except Exception as e:
-                            logger.error(f"Telegram send failed: {e}")
-                    
-                    # Also try urgent notifier if enabled
-                    if urgent_notifier and not telegram_sent:
+                # ALWAYS send to Discord (score 2+)
+                logger.info(f"📨 Score {rating.score}/10 → Discord: @{user.username}")
+                try:
+                    discord_result = await discord.send_tweet(
+                        user.webhook_url, user.username, tweet,
+                        {"score": rating.score, "category": rating.category,
+                         "summary": rating.summary, "action": "send", "reason": rating.reason}
+                    )
+                    if discord_result["sent"]:
+                        db.record_sent_tweet(
+                            tweet_id=tweet.id, username=user.username,
+                            channel_id=user.channel_id, text=tweet.text,
+                            created_at=tweet.created_at
+                        )
+                except Exception as e:
+                    logger.error(f"Discord send failed: {e}")
+                
+                # ALSO send to Telegram (score 5+)
+                if rating.score >= 5 and settings.USE_TELEGRAM:
+                    try:
+                        from telegram_bot import telegram_bot
+                        telegram_result = await telegram_bot.send_urgent_tweet(
+                            username=user.username,
+                            text=tweet.text,
+                            url=tweet.url,
+                            metrics={
+                                "likes": tweet.likes,
+                                "retweets": tweet.retweets,
+                                "replies": tweet.replies
+                            }
+                        )
+                        if telegram_result.get("success"):
+                            logger.info(f"📱 Telegram sent for HIGH VALUE tweet @{user.username}")
+                    except Exception as e:
+                        logger.error(f"Telegram send failed: {e}")
                         try:
                             should_send = await rate_limiter.should_send_notification(
                                 user.username, tweet.id
@@ -263,115 +262,6 @@ class AIScheduler:
                         except Exception as e:
                             logger.error(f"WhatsApp error: {e}")
                 
-                # 5-7: MEDIUM VALUE → Discord (with AI verification)
-                # OR Telegram with BUILD if pioneer opportunity!
-                else:
-                    logger.info(f"📊 MEDIUM tweet from @{user.username} (score: {rating.score}/10) → Discord verification")
-                    
-                    # VERIFY with Discord Verifier Agent
-                    try:
-                        verification = await discord_verifier.verify(tweet, user.username)
-                        
-                        if verification.should_send:
-                            # CHECK: Is this a pioneer opportunity with market potential?
-                            is_pioneer = (
-                                verification.pioneer_opportunity or 
-                                verification.market_potential in ["high", "medium"] or
-                                (verification.build_alternative and len(verification.build_alternative) > 10)
-                            )
-                            
-                            if is_pioneer and settings.USE_TELEGRAM:
-                                # 🔥 PIONEER OPPORTUNITY → Telegram with BUILD buttons!
-                                logger.info(f"🔥 PIONEER OPPORTUNITY! @{user.username} - sending to Telegram with BUILD")
-                                
-                                # Create enhanced tweet text with opportunity note
-                                enhanced_text = f"{tweet.text}\n\n💡 Opportunity: {verification.build_alternative or 'Build alternative version'}"
-                                
-                                # Send to Telegram with buttons
-                                telegram_result = await telegram_bot.send_urgent_tweet(
-                                    username=user.username,
-                                    text=enhanced_text,
-                                    url=tweet.url,
-                                    metrics={
-                                        "likes": tweet.likes,
-                                        "retweets": tweet.retweets,
-                                        "replies": tweet.replies
-                                    }
-                                )
-                                
-                                if telegram_result.get("success"):
-                                    db.record_sent_tweet(
-                                        tweet_id=tweet.id,
-                                        username=user.username,
-                                        channel_id=user.channel_id,
-                                        text=tweet.text,
-                                        created_at=tweet.created_at
-                                    )
-                                    logger.info(f"🚀 Telegram BUILD: Pioneer opportunity from @{user.username}")
-                                else:
-                                    # Fallback to Discord
-                                    await send_to_discord()
-                            else:
-                                # Standard → Discord
-                                await send_to_discord()
-                                
-                        else:
-                            logger.info(f"🚫 Discord rejected: {verification.reason}")
-                            
-                    except Exception as e:
-                        logger.error(f"Discord verification error: {e}")
-            
-            else:
-                # Legacy mode - no AI, send all to default webhook
-                result = await discord.send_tweet(
-                    user.webhook_url,
-                    user.username,
-                    tweet,
-                    {"score": 5, "category": "legacy", "summary": tweet.text[:100],
-                     "action": "send", "reason": "AI disabled"}
-                )
-                
-                if result["sent"]:
-                    db.record_sent_tweet(
-                        tweet_id=tweet.id,
-                        username=user.username,
-                        channel_id=user.channel_id,
-                        text=tweet.text,
-                        created_at=tweet.created_at
-                    )
-                    logger.info(f"📨 Legacy mode: Sent tweet from @{user.username}")
-            
-            # Rate limit protection
-            await asyncio.sleep(1)
-        
-        # Update last_tweet_id
-        if newest_id > last_id:
-            db.update_user_last_tweet_id(user.username, str(newest_id))
-            logger.debug(f"Updated last_tweet_id for @{user.username} to {newest_id}")
-    
-    async def _handle_ai_action(self, rating: TweetRating, user: UserWithChannel, tweet: Tweet) -> None:
-        """Handle special AI-detected actions."""
-        action = rating.action.lower()
-        
-        if action == "filter":
-            logger.info(f"AI decided to filter tweet from @{user.username}")
-            return
-        
-        elif action == "build_bot":
-            logger.info(f"🤖 AI detected bot opportunity from @{user.username}!")
-            logger.info(f"   Tweet: {tweet.text[:100]}...")
-            # TODO: Implement bot building logic
-            # This is where you'd integrate with your bot builder
-            
-        elif action == "follow_user":
-            logger.info(f"👤 AI suggests following @{user.username}")
-            # TODO: Implement auto-follow logic
-            # This would require Twitter API v2 with write permissions
-            
-        elif action == "highlight":
-            logger.info(f"⭐ AI highlighted important tweet from @{user.username}")
-            # Already handled by tier routing
-    
     async def run_once(self) -> None:
         """Run a single monitoring cycle with AI analysis."""
         logger.info("Starting AI-powered monitoring cycle...")
