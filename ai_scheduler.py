@@ -146,17 +146,20 @@ class AIScheduler:
                         f"{rating.score}/10 ({rating.category}) - {rating.action}"
                     )
                     
-                    # Record rating in database
-                    db.record_tweet_rating(
-                        tweet_id=tweet.id,
-                        username=user.username,
-                        channel_id=user.channel_id,
-                        score=rating.score,
-                        category=rating.category,
-                        summary=rating.summary,
-                        action=rating.action,
-                        reason=rating.reason
-                    )
+                    # Record rating in database (optional - skip if not exists)
+                    try:
+                        db.record_tweet_rating(
+                            tweet_id=tweet.id,
+                            username=user.username,
+                            channel_id=user.channel_id,
+                            score=rating.score,
+                            category=rating.category,
+                            summary=rating.summary,
+                            action=rating.action,
+                            reason=rating.reason
+                        )
+                    except AttributeError:
+                        pass  # Method not available, skip
                     
                     # Handle special AI actions
                     await self._handle_ai_action(rating, user, tweet)
