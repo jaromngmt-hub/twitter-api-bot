@@ -8,7 +8,7 @@ services:
       - key: DATABASE_PATH
         value: /app/data/monitor.db
       - key: CHECK_INTERVAL_SECONDS
-        value: "14400"  # 4 hours
+        value: "60"  # 4 hours
       - key: MAX_TWEETS_PER_CHECK
         value: "100"
       - key: LOG_LEVEL
