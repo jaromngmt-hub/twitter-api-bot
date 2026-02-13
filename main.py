@@ -11,7 +11,7 @@ from rich.table import Table
 
 from config import settings
 from database import db
-from scheduler import run_once, run_scheduler
+from ai_scheduler import run_ai_once as run_once, run_ai_scheduler as run_scheduler
 from twitter_client import TwitterClient
 
 # Configure logging
