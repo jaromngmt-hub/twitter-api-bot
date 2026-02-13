@@ -14,7 +14,7 @@ import uvicorn
 
 from config import settings
 from database import db
-from scheduler import Scheduler
+from ai_scheduler import AIScheduler as Scheduler
 from twitter_client import TwitterClient
 from loguru import logger
 
@@ -276,7 +276,7 @@ async def stop_monitor():
 async def run_once_check(background_tasks: BackgroundTasks):
     """Run a single monitoring cycle."""
     async def run_single():
-        from scheduler import run_once
+        from ai_scheduler import run_ai_once as run_once
         await run_once()
     
     background_tasks.add_task(run_single)
@@ -288,6 +288,38 @@ async def run_once_check(background_tasks: BackgroundTasks):
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+
+
+@app.get("/api/debug")
+async def debug_info():
+    """Debug info - check if scheduler is working."""
+    from database import db
+    
+    # Get recent tweets
+    recent_tweets = db.query(
+        "SELECT COUNT(*) as count FROM sent_tweets WHERE created_at > datetime('now', '-1 hour')"
+    )[0]['count'] if hasattr(db, 'query') else 0
+    
+    # Get last check time
+    last_check = db.query(
+        "SELECT MAX(created_at) as last FROM sent_tweets"
+    )[0]['last'] if hasattr(db, 'query') else None
+    
+    return {
+        "status": "running" if scheduler and scheduler.running else "stopped",
+        "scheduler_running": scheduler.running if scheduler else False,
+        "interval": settings.CHECK_INTERVAL_SECONDS,
+        "recent_tweets_last_hour": recent_tweets,
+        "last_tweet_sent": last_check,
+        "users_monitored": len(db.get_all_users()) if hasattr(db, 'get_all_users') else 0,
+        "config": {
+            "use_telegram": settings.USE_TELEGRAM,
+            "telegram_token_set": bool(settings.TELEGRAM_BOT_TOKEN),
+            "telegram_chat_id": settings.TELEGRAM_CHAT_ID,
+            "enable_ai": settings.ENABLE_AI_ANALYSIS,
+            "openrouter_key_set": bool(os.getenv("OPENROUTER_API_KEY")),
+        }
+    }
 
 
 @app.get("/api/test/config")
