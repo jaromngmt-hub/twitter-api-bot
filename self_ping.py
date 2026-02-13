@@ -1,16 +1,22 @@
-"""Self-ping to keep Render service awake."""
+"""Self-ping module to keep Render service awake."""
 import asyncio
 import httpx
 from loguru import logger
 
-async def self_ping():
+SELF_URL = "https://twitter-api-bot.onrender.com/api/health"
+
+async def self_ping_loop():
     """Ping ourselves every 10 minutes to prevent sleeping."""
-    url = "https://twitter-api-bot.onrender.com/api/health"
     while True:
         try:
             async with httpx.AsyncClient() as client:
-                await client.get(url, timeout=10)
-                logger.debug("Self-ping successful")
+                response = await client.get(SELF_URL, timeout=10)
+                if response.status_code == 200:
+                    logger.debug("Self-ping: OK")
+                else:
+                    logger.warning(f"Self-ping: Status {response.status_code}")
         except Exception as e:
             logger.error(f"Self-ping failed: {e}")
-        await asyncio.sleep(600)  # 10 minutes
+        
+        # Wait 10 minutes
+        await asyncio.sleep(600)

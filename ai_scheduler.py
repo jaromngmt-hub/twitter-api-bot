@@ -410,6 +410,11 @@ class AIScheduler:
         # Start background sequential notification processor
         queue_processor = asyncio.create_task(self._process_notification_queue())
         
+        # Start self-ping to keep Render awake (FREE - no UptimeRobot needed!)
+        from self_ping import self_ping_loop
+        self_ping_task = asyncio.create_task(self_ping_loop())
+        logger.info("Self-ping started (keeps Render awake every 10min)")
+        
         try:
             while self.running:
                 cycle_start = asyncio.get_event_loop().time()
@@ -439,6 +444,7 @@ class AIScheduler:
         finally:
             self.running = False
             queue_processor.cancel()
+            self_ping_task.cancel()
             logger.info("AI scheduler stopped")
     
     def _signal_handler(self) -> None:
