@@ -173,9 +173,9 @@ class AIScheduler:
                     logger.info(f"🗑️ Tweet filtered (score: {rating.score}/10) - too low")
                     continue
                 
-                # 8-10: HIGH VALUE → Telegram
-                elif rating.score >= 8:
-                    logger.info(f"🚨 HIGH VALUE tweet from @{user.username} (score: {rating.score}/10) → Telegram")
+                # 5-10: GOOD VALUE → Telegram (was 8+, now 5+ to catch more good tweets!)
+                elif rating.score >= 5:
+                    logger.info(f"🚨 GOOD VALUE tweet from @{user.username} (score: {rating.score}/10) → Telegram (score 5+)")
                     
                     # ALWAYS send to Telegram for high value tweets
                     telegram_sent = False
