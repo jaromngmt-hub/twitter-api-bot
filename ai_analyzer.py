@@ -1,13 +1,19 @@
-"""AI-powered tweet analyzer for rating content importance."""
+"""AI-powered tweet analyzer for rating content importance.
+
+USING OUR ai_router with DeepSeek V3.2 - NOT direct OpenAI!
+"""
 
 import json
+import re
 from typing import Optional
 
 import httpx
 from loguru import logger
+from pydantic import BaseModel
 
 from config import settings
 from models import Tweet
+from ai_router import ai_router
 
 
 class AIAnalyzerError(Exception):
@@ -25,27 +31,20 @@ class TweetRating(BaseModel):
 
 
 class AIAnalyzer:
-    """Analyzes tweets using OpenAI API for importance rating."""
+    """Analyzes tweets using OUR ai_router (DeepSeek/Kimi), NOT OpenAI directly!"""
     
     def __init__(self, api_key: str = None):
-        self.api_key = api_key or settings.OPENAI_API_KEY
-        self.client = httpx.AsyncClient(
-            timeout=httpx.Timeout(30.0),
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
-        )
+        self.ai_router = ai_router
     
     async def __aenter__(self):
         return self
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.client.aclose()
+        pass
     
     async def analyze_tweet(self, username: str, tweet: Tweet) -> TweetRating:
         """
-        Analyze a tweet and return importance rating 1-10.
+        Analyze a tweet using DeepSeek V3.2 via our ai_router.
         
         Rating scale:
         1-3: Low value (fluff, greetings, spam)
@@ -63,47 +62,19 @@ class AIAnalyzer:
                 reason="Retweets are not original content"
             )
         
-        if not self.api_key:
-            logger.warning("No OpenAI API key, returning default rating")
-            return TweetRating(
-                score=5,
-                category="unknown",
-                summary=tweet.text[:100],
-                action="send",
-                reason="No AI analysis available"
-            )
-        
         prompt = self._build_prompt(username, tweet)
         
         try:
-            response = await self.client.post(
-                "https://api.openai.com/v1/chat/completions",
-                json={
-                    "model": "gpt-3.5-turbo",
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": "You are an expert crypto/tech analyst. Rate tweets on importance (1-10). Be strict - most tweets are fluff."
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-                    "temperature": 0.3,
-                    "max_tokens": 200
-                }
+            # Use OUR ai_router with DeepSeek V3.2!
+            response = await self.ai_router.generate(
+                prompt=prompt,
+                task_type="analysis",  # Uses DeepSeek V3.2
+                temperature=0.3,
+                max_tokens=500
             )
             
-            response.raise_for_status()
-            data = response.json()
+            return self._parse_response(response, tweet)
             
-            content = data["choices"][0]["message"]["content"]
-            return self._parse_response(content, tweet)
-            
-        except httpx.HTTPStatusError as e:
-            logger.error(f"OpenAI API error: {e}")
-            raise AIAnalyzerError(f"API error: {e}")
         except Exception as e:
             logger.error(f"Analysis failed: {e}")
             # Return default rating on error
@@ -151,50 +122,42 @@ Respond in JSON format:
     def _parse_response(self, content: str, tweet: Tweet) -> TweetRating:
         """Parse AI response into TweetRating."""
         try:
-            # Try to parse as JSON
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0].strip()
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0].strip()
-            
-            data = json.loads(content)
+            # Extract JSON from response
+            json_match = re.search(r'\{[^}]+\}', content, re.DOTALL)
+            if json_match:
+                data = json.loads(json_match.group())
+            else:
+                data = json.loads(content)
             
             return TweetRating(
-                score=max(1, min(10, int(data.get("score", 5)))),
+                score=data.get("score", 5),
                 category=data.get("category", "unknown"),
                 summary=data.get("summary", tweet.text[:100]),
                 action=data.get("action", "send"),
-                reason=data.get("reason", "No reason provided")
+                reason=data.get("reason", "AI analyzed")
             )
             
-        except json.JSONDecodeError:
-            # Fallback if not valid JSON
-            logger.warning(f"Could not parse AI response as JSON: {content}")
-            
-            # Extract score if possible
-            score = 5
-            if "score" in content.lower():
-                import re
-                match = re.search(r'score["\']?\s*:\s*(\d+)', content)
-                if match:
-                    score = int(match.group(1))
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse AI response: {e}")
+            # Fallback: try to extract score from text
+            score_match = re.search(r'(\d+)', content)
+            score = int(score_match.group(1)) if score_match else 5
             
             return TweetRating(
-                score=score,
+                score=min(max(score, 1), 10),
                 category="unknown",
                 summary=tweet.text[:100],
                 action="send",
-                reason="Could not parse AI response"
+                reason=f"Parse error: {content[:100]}"
             )
 
 
-# Pydantic model for TweetRating
-from pydantic import BaseModel
+# Global instance
+analyzer: Optional[AIAnalyzer] = None
 
-class TweetRating(BaseModel):
-    """Rating result for a tweet."""
-    score: int
-    category: str
-    summary: str
-    action: str
-    reason: str
+
+def init_analyzer():
+    """Initialize the global analyzer."""
+    global analyzer
+    analyzer = AIAnalyzer()
+    return analyzer
