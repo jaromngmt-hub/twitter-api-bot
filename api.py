@@ -779,3 +779,31 @@ async def test_complete():
 
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
+@app.get("/api/db-check")
+async def db_check():
+    """Check database status."""
+    import sqlite3
+    try:
+        conn = sqlite3.connect(str(db.db_path))
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT COUNT(*) FROM monitored_users WHERE is_active = 1")
+        users = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM sent_tweets")
+        sent = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT MAX(created_at) FROM sent_tweets")
+        last = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        return {
+            "db_path": str(db.db_path),
+            "active_users": users,
+            "sent_tweets": sent,
+            "last_tweet": last
+        }
+    except Exception as e:
+        return {"error": str(e)}
