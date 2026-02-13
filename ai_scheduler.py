@@ -177,8 +177,36 @@ class AIScheduler:
                 elif rating.score >= 8:
                     logger.info(f"🚨 HIGH VALUE tweet from @{user.username} (score: {rating.score}/10) → Telegram")
                     
-                    # Send WhatsApp notification for user to decide
-                    if urgent_notifier:
+                    # ALWAYS send to Telegram for high value tweets
+                    telegram_sent = False
+                    if settings.USE_TELEGRAM:
+                        try:
+                            from telegram_bot import telegram_bot
+                            telegram_result = await telegram_bot.send_urgent_tweet(
+                                username=user.username,
+                                text=tweet.text,
+                                url=tweet.url,
+                                metrics={
+                                    "likes": tweet.likes,
+                                    "retweets": tweet.retweets,
+                                    "replies": tweet.replies
+                                }
+                            )
+                            if telegram_result.get("success"):
+                                logger.info(f"📱 Telegram sent for HIGH VALUE tweet @{user.username}")
+                                telegram_sent = True
+                                db.record_sent_tweet(
+                                    tweet_id=tweet.id,
+                                    username=user.username,
+                                    channel_id=user.channel_id,
+                                    text=tweet.text,
+                                    created_at=tweet.created_at
+                                )
+                        except Exception as e:
+                            logger.error(f"Telegram send failed: {e}")
+                    
+                    # Also try urgent notifier if enabled
+                    if urgent_notifier and not telegram_sent:
                         try:
                             should_send = await rate_limiter.should_send_notification(
                                 user.username, tweet.id
