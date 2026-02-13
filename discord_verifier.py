@@ -131,6 +131,12 @@ PIONEER OPPORTUNITY - Give HIGHER score if:
 🔥 Is this validating market demand ("thinking to build", "would you use")?
 🔥 Can we be FIRST to build what they're discussing?
 
+⚠️ CRITICAL: Read the tweet CAREFULLY!
+- Don't confuse metaphors with actual products
+- "Landing page as commitment device" = METHAPHOR, not a product idea
+- Look for ACTUAL tech/blockchain/AI mentions
+- Understand the DOMAIN (Solana, AI agents, etc.)
+
 REJECT (should_send: false) only if:
 ✗ Pure retweet (RT @user)
 ✗ Simple reply (@user thanks/cool/agreed)
@@ -159,7 +165,7 @@ RESPONSE FORMAT (JSON):
   "is_original_content": true/false,
   "market_potential": "high/medium/low/none",
   "pioneer_opportunity": true/false,
-  "build_alternative": "Can we build better version? Brief idea or null"
+  "build_alternative": "Based on ACTUAL tweet content - what could we build? Be specific to the domain mentioned (Solana, AI, etc.). NULL if no clear opportunity."
 }}"""
 
         try:
