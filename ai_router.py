@@ -129,6 +129,7 @@ class AIRouter:
             "design": "kimi-k2.5",            # 🧠 Kimi K2.5: Great for design systems
             "code": "deepseek-coder",         # 💻 DeepSeek: FAST + CHEAP + GOOD!
             "review": "kimi-k2.5",            # 🧠 Kimi K2.5: Critical analysis
+            "analysis": "kimi-k2.5",          # 🧠 Kimi K2.5: Content analysis (Discord verifier)
             "docs": "deepseek-coder",         # 💻 DeepSeek: Fast for docs
         }
     

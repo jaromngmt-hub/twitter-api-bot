@@ -152,7 +152,7 @@ RESPONSE FORMAT (JSON):
         try:
             response = await ai_router.generate(
                 prompt=prompt,
-                task_type="analysis",
+                task_type="analysis",  # Używa Kimi K2.5 (dodane do defaults!)
                 temperature=0.2,
                 max_tokens=500
             )
