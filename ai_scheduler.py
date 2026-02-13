@@ -131,6 +131,11 @@ class AIScheduler:
                 logger.debug(f"Tweet {tweet.id} already sent, skipping")
                 continue
             
+            # QUICK FILTER: Skip retweets immediately (before any processing)
+            if tweet.text.startswith("RT @"):
+                logger.debug(f"Skipping retweet from @{user.username}")
+                continue
+            
             # AI Analysis (if enabled)
             rating = None
             if self.enable_ai and analyzer:
