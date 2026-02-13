@@ -21,6 +21,7 @@ from twitter_client import (
 )
 from urgent_notifier import UrgentNotifier
 from whatsapp_handler import whatsapp_handler
+from discord_verifier import discord_verifier
 
 
 class AIScheduler:
@@ -162,13 +163,13 @@ class AIScheduler:
             
             # Route tweets based on AI score
             if self.enable_ai and rating:
-                # 0-6: Filter completely (useless)
-                if rating.score < 7:
-                    logger.info(f"🗑️ Tweet from @{user.username} filtered (score: {rating.score}/10)")
+                # 0-4: Filter completely (trash)
+                if rating.score < 5:
+                    logger.info(f"🗑️ Tweet filtered (score: {rating.score}/10) - too low")
                     continue
                 
-                # 7-10: Send to Telegram for user decision (BUILD/INTERESTING/NOTHING)
-                else:
+                # 8-10: HIGH VALUE → Telegram
+                elif rating.score >= 8:
                     logger.info(f"🚨 HIGH VALUE tweet from @{user.username} (score: {rating.score}/10) → Telegram")
                     
                     # Send WhatsApp notification for user to decide
@@ -223,6 +224,42 @@ class AIScheduler:
                                 
                         except Exception as e:
                             logger.error(f"WhatsApp error: {e}")
+                
+                # 5-7: MEDIUM VALUE → Discord (with AI verification)
+                else:
+                    logger.info(f"📊 MEDIUM tweet from @{user.username} (score: {rating.score}/10) → Discord verification")
+                    
+                    # VERIFY with Discord Verifier Agent
+                    try:
+                        verification = await discord_verifier.verify(tweet, user.username)
+                        
+                        if verification.should_send:
+                            result = await discord.send_tweet(
+                                user.username,
+                                tweet,
+                                {
+                                    "score": rating.score,
+                                    "category": verification.category,
+                                    "summary": rating.summary,
+                                    "action": "send",
+                                    "reason": f"AI verified: {verification.reason}"
+                                }
+                            )
+                            
+                            if result["sent"]:
+                                db.record_sent_tweet(
+                                    tweet_id=tweet.id,
+                                    username=user.username,
+                                    channel_id=user.channel_id,
+                                    text=tweet.text,
+                                    created_at=tweet.created_at
+                                )
+                                logger.info(f"📨 Discord: {verification.category} tweet (score {rating.score}) - {verification.reason}")
+                        else:
+                            logger.info(f"🚫 Discord rejected: {verification.reason}")
+                            
+                    except Exception as e:
+                        logger.error(f"Discord verification error: {e}")
             
             else:
                 # Legacy mode - no AI, send all to default webhook
