@@ -53,6 +53,16 @@ class AIAnalyzer:
         7-8: High value (news, insights, useful info)
         9-10: Critical value (alpha, breaking news, opportunities)
         """
+        # QUICK FILTER: Retweets are NEVER valuable
+        if tweet.text.startswith("RT @"):
+            return TweetRating(
+                score=1,
+                category="retweet",
+                summary="Retweet - filtered",
+                action="filter",
+                reason="Retweets are not original content"
+            )
+        
         if not self.api_key:
             logger.warning("No OpenAI API key, returning default rating")
             return TweetRating(
@@ -109,7 +119,7 @@ class AIAnalyzer:
         """Build the analysis prompt."""
         return f"""Analyze this tweet from @{username}:
 
-TWEET: """{tweet.text}"""
+TWEET: {tweet.text}
 
 METRICS:
 - Likes: {tweet.likes}
