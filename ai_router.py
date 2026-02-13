@@ -86,7 +86,7 @@ CODING_MODELS = {
     "deepseek-v3.2": ModelConfig(
         id="deepseek/deepseek-v3.2",
         name="DeepSeek V3.2",
-        strength="Analysis & verification - cheap for content filtering",
+        strength="Analysis & verification - best quality/price ratio. GPT-5-nano too dumb, Kimi too expensive",
         input_price=0.25,
         output_price=0.38,
         context=163840
@@ -163,7 +163,7 @@ class AIRouter:
             "code-premium": "minimax-m2.5",   # ⭐ MiniMax M2.5: SOTA quality for complex builds
             "code-fix": "minimax-m2.1",         # 🔧 MiniMax M2.1: Fast fixes after review
             "review": "kimi-k2.5",            # 🧠 Kimi K2.5: Critical analysis
-            "analysis": "gpt-5-nano",         # 🚀 GPT-5 Nano: ULTRA CHEAP analysis - $0.05/1M tokens!
+            "analysis": "deepseek-v3.2",      # 🔍 DeepSeek V3.2: Good quality + cheap ($0.25/1M) - better than GPT-5-nano!
             "docs": "deepseek-coder",         # 💻 DeepSeek: Fast for docs
         }
     
