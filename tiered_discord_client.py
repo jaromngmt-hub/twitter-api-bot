@@ -181,6 +181,9 @@ class TieredDiscordClient:
         retweets = self._format_number(tweet.retweets)
         replies = self._format_number(tweet.replies)
         
+        # Build tweet URL
+        tweet_url = f"https://twitter.com/{username}/status/{tweet.id}"
+        
         embed = {
             "author": {
                 "name": f"@{username} ({labels[tier]})",
@@ -188,6 +191,7 @@ class TieredDiscordClient:
                 "icon_url": f"https://unavatar.io/twitter/{username}"
             },
             "title": f"📈 Score: {score}/10 | Category: {category.upper()}",
+            "url": tweet_url,
             "description": description,
             "color": colors[tier],
             "timestamp": tweet.created_at.strftime("%Y-%m-%dT%H:%M:%S.000Z"),

@@ -53,7 +53,7 @@ class AIAnalyzer:
         9-10: Critical value (alpha, breaking news, opportunities)
         """
         # QUICK FILTER: Retweets are NEVER valuable
-        if tweet.text.startswith("RT @"):
+        if tweet.text.strip().upper().startswith("RT @"):
             return TweetRating(
                 score=1,
                 category="retweet",

@@ -246,14 +246,245 @@ class Database:
             "UPDATE monitored_users SET last_tweet_id = ? WHERE username = ?",
             tweet_id, username
         )
+    
+    async def update_user_last_tweet_id(self, username: str, tweet_id: str):
+        """Alias for update_user_last_tweet."""
+        await self.update_user_last_tweet(username, tweet_id)
+    
+    async def set_user_inactive(self, username: str):
+        """Set user as inactive."""
+        await self.execute(
+            "UPDATE monitored_users SET is_active = FALSE WHERE username = $1"
+            if self.is_postgres else
+            "UPDATE monitored_users SET is_active = 0 WHERE username = ?",
+            username
+        )
+    
+    # ============== SYNC COMPATIBILITY METHODS ==============
+    # These methods provide sync interface for legacy code (api.py, scheduler.py)
+    
+    def _run_sync(self, coro):
+        """Run async coroutine synchronously."""
+        try:
+            loop = asyncio.get_running_loop()
+            # Already in async context, create task
+            return asyncio.create_task(coro)
+        except RuntimeError:
+            # No loop running, use run_until_complete
+            return asyncio.run(coro)
+    
+    def get_active_users_with_channels(self) -> List[Dict]:
+        """Get all active users with their channel webhook URLs (sync)."""
+        async def _get():
+            query = """
+                SELECT u.id, u.username, u.channel_id, u.last_tweet_id, u.is_active,
+                       c.name as channel_name, c.webhook_url
+                FROM monitored_users u
+                JOIN channels c ON u.channel_id = c.id
+                WHERE u.is_active = TRUE
+            """ if self.is_postgres else """
+                SELECT u.id, u.username, u.channel_id, u.last_tweet_id, u.is_active,
+                       c.name as channel_name, c.webhook_url
+                FROM monitored_users u
+                JOIN channels c ON u.channel_id = c.id
+                WHERE u.is_active = 1
+            """
+            return await self.fetchall(query)
+        
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # We're in async context, this shouldn't happen with sync methods
+                # Return empty list as fallback
+                logger.warning("get_active_users_with_channels called from async context without await!")
+                return []
+            return loop.run_until_complete(_get())
+        except RuntimeError:
+            return asyncio.run(_get())
+    
+    def list_channels(self) -> List[Dict]:
+        """Get all channels with user count (sync)."""
+        async def _get():
+            channels = await self.fetchall("SELECT * FROM channels")
+            result = []
+            for ch in channels:
+                count_result = await self.fetchone(
+                    "SELECT COUNT(*) as count FROM monitored_users WHERE channel_id = $1"
+                    if self.is_postgres else
+                    "SELECT COUNT(*) as count FROM monitored_users WHERE channel_id = ?",
+                    ch['id']
+                )
+                result.append({
+                    'id': ch['id'],
+                    'name': ch['name'],
+                    'webhook_url': ch['webhook_url'],
+                    'user_count': count_result['count'] if count_result else 0,
+                    'created_at': ch.get('created_at', '')
+                })
+            return result
+        
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                return []
+            return loop.run_until_complete(_get())
+        except RuntimeError:
+            return asyncio.run(_get())
+    
+    def list_users(self, channel: Optional[str] = None) -> List[Dict]:
+        """Get all users, optionally filtered by channel (sync)."""
+        async def _get():
+            if channel:
+                ch = await self.fetchone(
+                    "SELECT id FROM channels WHERE name = $1" if self.is_postgres else "SELECT id FROM channels WHERE name = ?",
+                    channel
+                )
+                if not ch:
+                    return []
+                users = await self.fetchall(
+                    "SELECT u.*, c.name as channel_name FROM monitored_users u JOIN channels c ON u.channel_id = c.id WHERE u.channel_id = $1"
+                    if self.is_postgres else
+                    "SELECT u.*, c.name as channel_name FROM monitored_users u JOIN channels c ON u.channel_id = c.id WHERE u.channel_id = ?",
+                    ch['id']
+                )
+            else:
+                users = await self.fetchall("""
+                    SELECT u.*, c.name as channel_name 
+                    FROM monitored_users u 
+                    JOIN channels c ON u.channel_id = c.id
+                """)
+            
+            result = []
+            for u in users:
+                result.append({
+                    'id': u['id'],
+                    'username': u['username'],
+                    'channel_name': u.get('channel_name', ''),
+                    'last_tweet_id': u.get('last_tweet_id'),
+                    'is_active': u.get('is_active', True),
+                    'added_at': u.get('added_at', '')
+                })
+            return result
+        
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                return []
+            return loop.run_until_complete(_get())
+        except RuntimeError:
+            return asyncio.run(_get())
+    
+    def create_channel(self, name: str, webhook_url: str) -> int:
+        """Create a new channel (sync)."""
+        async def _create():
+            result = await self.fetchone(
+                "INSERT INTO channels (name, webhook_url) VALUES ($1, $2) RETURNING id"
+                if self.is_postgres else
+                "INSERT INTO channels (name, webhook_url) VALUES (?, ?) RETURNING id",
+                name, webhook_url
+            )
+            return result['id'] if result else 0
+        
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                return 0
+            return loop.run_until_complete(_create())
+        except RuntimeError:
+            return asyncio.run(_create())
+    
+    def delete_channel(self, name: str) -> bool:
+        """Delete a channel (sync)."""
+        async def _delete():
+            result = await self.execute(
+                "DELETE FROM channels WHERE name = $1"
+                if self.is_postgres else
+                "DELETE FROM channels WHERE name = ?",
+                name
+            )
+            return True
+        
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                return False
+            return loop.run_until_complete(_delete())
+        except RuntimeError:
+            return asyncio.run(_delete())
+    
+    def get_channel_by_name(self, name: str) -> Optional[Dict]:
+        """Get channel by name (sync)."""
+        async def _get():
+            return await self.fetchone(
+                "SELECT * FROM channels WHERE name = $1"
+                if self.is_postgres else
+                "SELECT * FROM channels WHERE name = ?",
+                name
+            )
+        
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                return None
+            return loop.run_until_complete(_get())
+        except RuntimeError:
+            return asyncio.run(_get())
+    
+    def add_user(self, username: str, channel_id: int, last_tweet_id: Optional[str] = None) -> int:
+        """Add a new user (sync)."""
+        async def _add():
+            result = await self.fetchone(
+                "INSERT INTO monitored_users (username, channel_id, last_tweet_id) VALUES ($1, $2, $3) RETURNING id"
+                if self.is_postgres else
+                "INSERT INTO monitored_users (username, channel_id, last_tweet_id) VALUES (?, ?, ?) RETURNING id",
+                username, channel_id, last_tweet_id
+            )
+            return result['id'] if result else 0
+        
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                return 0
+            return loop.run_until_complete(_add())
+        except RuntimeError:
+            return asyncio.run(_add())
+    
+    def remove_user(self, username: str) -> bool:
+        """Remove a user (sync)."""
+        async def _remove():
+            await self.execute(
+                "DELETE FROM monitored_users WHERE username = $1"
+                if self.is_postgres else
+                "DELETE FROM monitored_users WHERE username = ?",
+                username
+            )
+            return True
+        
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                return False
+            return loop.run_until_complete(_remove())
+        except RuntimeError:
+            return asyncio.run(_remove())
+    
+    def get_all_users(self) -> List[Dict]:
+        """Get all users (sync)."""
+        return self.list_users()
+    
+    def query(self, query: str, params: tuple = ()) -> List[Dict]:
+        """Execute raw query (sync)."""
+        async def _query():
+            return await self.fetchall(query, *params)
+        
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                return []
+            return loop.run_until_complete(_query())
+        except RuntimeError:
+            return asyncio.run(_query())
 
 
-# Global instance
-db: Optional[Database] = None
-
-async def init_db():
-    """Initialize database."""
-    global db
-    db = Database()
-    await db.init()
-    return db
+# Global instance - initialized on first use
+db = Database()

@@ -73,7 +73,7 @@ class AIScheduler:
             
             except TwitterNotFoundError:
                 logger.warning(f"User @{user.username} not found, marking as inactive")
-                db.set_user_inactive(user.username)
+                await db.set_user_inactive(user.username)
             
             except TwitterAuthError:
                 logger.error("Twitter API authentication failed")
@@ -92,7 +92,7 @@ class AIScheduler:
     ) -> None:
         """Handle new user - set last_tweet_id without sending."""
         newest_tweet = max(tweets, key=lambda t: int(t.id))
-        db.update_user_last_tweet_id(user.username, newest_tweet.id)
+        await db.update_user_last_tweet_id(user.username, newest_tweet.id)
         logger.info(
             f"Initialized @{user.username} with last_tweet_id={newest_tweet.id} "
             f"(no tweets sent to prevent spam)"
@@ -127,7 +127,7 @@ class AIScheduler:
                 newest_id = tweet_id_int
             
             # Check if already sent
-            if db.is_tweet_sent(tweet.id, user.channel_id):
+            if await db.is_tweet_sent(tweet.id, user.channel_id):
                 logger.debug(f"Tweet {tweet.id} already sent, skipping")
                 continue
             
@@ -148,7 +148,7 @@ class AIScheduler:
                     
                     # Record rating in database (optional - skip if not exists)
                     try:
-                        db.record_tweet_rating(
+                        await db.record_tweet_rating(
                             tweet_id=tweet.id,
                             username=user.username,
                             channel_id=user.channel_id,
@@ -188,7 +188,7 @@ class AIScheduler:
                          "summary": rating.summary, "action": "send", "reason": rating.reason}
                     )
                     if discord_result["sent"]:
-                        db.record_sent_tweet(
+                        await db.record_sent_tweet(
                             tweet_id=tweet.id, username=user.username,
                             channel_id=user.channel_id, text=tweet.text,
                             created_at=tweet.created_at
@@ -202,15 +202,13 @@ class AIScheduler:
                         from telegram_bot import telegram_bot
                         telegram_result = await telegram_bot.send_urgent_tweet(
                             username=user.username,
-                            text=tweet.text,
-                            url=tweet.url,
-                            metrics={
-                                "likes": tweet.likes,
-                                "retweets": tweet.retweets,
-                                "replies": tweet.replies
-                            }
+                            tweet_text=tweet.text,
+                            score=rating.score,
+                            category=rating.category,
+                            reason=rating.reason,
+                            tweet_id=tweet.id
                         )
-                        if telegram_result.get("success"):
+                        if telegram_result.get("sent"):
                             logger.info(f"📱 Telegram sent for HIGH VALUE tweet @{user.username}")
                     except Exception as e:
                         logger.error(f"Telegram send failed: {e}")
@@ -269,7 +267,20 @@ class AIScheduler:
         """Run a single monitoring cycle with AI analysis."""
         logger.info("Starting AI-powered monitoring cycle...")
         
-        users = db.get_active_users_with_channels()
+        # Async query for users with channels
+        users = await db.fetchall("""
+            SELECT u.id, u.username, u.channel_id, u.last_tweet_id, u.is_active,
+                   c.name as channel_name, c.webhook_url
+            FROM monitored_users u
+            JOIN channels c ON u.channel_id = c.id
+            WHERE u.is_active = TRUE
+        """ if db.is_postgres else """
+            SELECT u.id, u.username, u.channel_id, u.last_tweet_id, u.is_active,
+                   c.name as channel_name, c.webhook_url
+            FROM monitored_users u
+            JOIN channels c ON u.channel_id = c.id
+            WHERE u.is_active = 1
+        """)
         
         if not users:
             logger.info("No active users to monitor")

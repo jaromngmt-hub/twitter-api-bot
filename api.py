@@ -64,6 +64,15 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("API starting up...")
     
+    # Initialize database FIRST (critical!)
+    try:
+        logger.info("Initializing database connection...")
+        await db.init()
+        logger.info("✅ Database initialized successfully")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize database: {e}")
+        raise
+    
     # Auto-start scheduler on boot (Render free tier fix)
     try:
         if not scheduler or not scheduler.running:
@@ -117,7 +126,12 @@ async def root():
 @app.get("/api/channels", response_model=List[ChannelResponse])
 async def get_channels():
     """Get all channels."""
-    channels = db.list_channels()
+    channels = await db.fetchall("""
+        SELECT c.*, COUNT(u.id) as user_count 
+        FROM channels c 
+        LEFT JOIN monitored_users u ON c.id = u.channel_id 
+        GROUP BY c.id
+    """)
     return [
         ChannelResponse(
             id=ch["id"],
@@ -134,7 +148,13 @@ async def get_channels():
 async def create_channel(channel: ChannelCreate):
     """Create a new channel."""
     try:
-        channel_id = db.create_channel(channel.name, channel.webhook_url)
+        result = await db.fetchone(
+            "INSERT INTO channels (name, webhook_url) VALUES ($1, $2) RETURNING id"
+            if db.is_postgres else
+            "INSERT INTO channels (name, webhook_url) VALUES (?, ?) RETURNING id",
+            channel.name, channel.webhook_url
+        )
+        channel_id = result['id'] if result else 0
         return {"success": True, "id": channel_id, "message": f"Channel '{channel.name}' created"}
     except Exception as e:
         if "UNIQUE constraint failed" in str(e):
@@ -146,7 +166,11 @@ async def create_channel(channel: ChannelCreate):
 async def delete_channel(channel_name: str):
     """Delete a channel."""
     try:
-        deleted = db.delete_channel(channel_name)
+        await db.execute(
+            "DELETE FROM channels WHERE name = $1" if db.is_postgres else "DELETE FROM channels WHERE name = ?",
+            channel_name
+        )
+        deleted = True
         if deleted:
             return {"success": True, "message": f"Channel '{channel_name}' deleted"}
         raise HTTPException(status_code=404, detail=f"Channel '{channel_name}' not found")
@@ -158,7 +182,38 @@ async def delete_channel(channel_name: str):
 @app.get("/api/users", response_model=List[UserResponse])
 async def get_users(channel: Optional[str] = None):
     """Get all users, optionally filtered by channel."""
-    users = db.list_users(channel)
+    if channel:
+        ch = await db.fetchone(
+            "SELECT id FROM channels WHERE name = $1" if db.is_postgres else "SELECT id FROM channels WHERE name = ?",
+            channel
+        )
+        if not ch:
+            users = []
+        else:
+            rows = await db.fetchall(
+                """SELECT u.*, c.name as channel_name 
+                    FROM monitored_users u 
+                    JOIN channels c ON u.channel_id = c.id 
+                    WHERE u.channel_id = $1"""
+                if db.is_postgres else
+                """SELECT u.*, c.name as channel_name 
+                    FROM monitored_users u 
+                    JOIN channels c ON u.channel_id = c.id 
+                    WHERE u.channel_id = ?""",
+                ch['id']
+            )
+            users = [{'id': r['id'], 'username': r['username'], 'channel_name': r.get('channel_name', ''),
+                      'last_tweet_id': r.get('last_tweet_id'), 'is_active': r.get('is_active', True),
+                      'added_at': r.get('added_at', '')} for r in rows]
+    else:
+        rows = await db.fetchall("""
+            SELECT u.*, c.name as channel_name 
+            FROM monitored_users u 
+            JOIN channels c ON u.channel_id = c.id
+        """)
+        users = [{'id': r['id'], 'username': r['username'], 'channel_name': r.get('channel_name', ''),
+                  'last_tweet_id': r.get('last_tweet_id'), 'is_active': r.get('is_active', True),
+                  'added_at': r.get('added_at', '')} for r in rows]
     return [
         UserResponse(
             id=u["id"],
@@ -181,7 +236,10 @@ async def create_user(user: UserCreate, background_tasks: BackgroundTasks):
         username = username[1:]
     
     # Get channel
-    channel = db.get_channel_by_name(user.channel_name)
+    channel = await db.fetchone(
+        "SELECT * FROM channels WHERE name = $1" if db.is_postgres else "SELECT * FROM channels WHERE name = ?",
+        user.channel_name
+    )
     if not channel:
         raise HTTPException(status_code=404, detail=f"Channel '{user.channel_name}' not found")
     
@@ -194,7 +252,13 @@ async def create_user(user: UserCreate, background_tasks: BackgroundTasks):
                 last_tweet_id = max(tweets, key=lambda t: int(t.id)).id
         
         # Add to database
-        user_id = db.add_user(username, channel.id, last_tweet_id)
+        result = await db.fetchone(
+            "INSERT INTO monitored_users (username, channel_id, last_tweet_id) VALUES ($1, $2, $3) RETURNING id"
+            if db.is_postgres else
+            "INSERT INTO monitored_users (username, channel_id, last_tweet_id) VALUES (?, ?, ?) RETURNING id",
+            username, channel['id'], last_tweet_id
+        )
+        user_id = result['id'] if result else 0
         
         return {
             "success": True,
@@ -217,7 +281,11 @@ async def delete_user(username: str):
         username = username[1:]
     
     try:
-        deleted = db.remove_user(username)
+        await db.execute(
+            "DELETE FROM monitored_users WHERE username = $1" if db.is_postgres else "DELETE FROM monitored_users WHERE username = ?",
+            username
+        )
+        deleted = True
         if deleted:
             return {"success": True, "message": f"User @{username} removed"}
         raise HTTPException(status_code=404, detail=f"User @{username} not found")
@@ -229,8 +297,10 @@ async def delete_user(username: str):
 @app.get("/api/status")
 async def get_status():
     """Get current monitor status."""
-    users = db.list_users()
-    channels = db.list_channels()
+    users_rows = await db.fetchall("SELECT * FROM monitored_users")
+    channels_rows = await db.fetchall("SELECT * FROM channels")
+    users = [{'id': r['id'], 'username': r['username'], 'is_active': r.get('is_active', True)} for r in users_rows]
+    channels = [{'id': r['id'], 'name': r['name'], 'webhook_url': r['webhook_url']} for r in channels_rows]
     
     return StatusResponse(
         running=scheduler is not None and scheduler.running,
@@ -295,15 +365,30 @@ async def debug_info():
     """Debug info - check if scheduler is working."""
     from database import db
     
-    # Get recent tweets
-    recent_tweets = db.query(
-        "SELECT COUNT(*) as count FROM sent_tweets WHERE created_at > datetime('now', '-1 hour')"
-    )[0]['count'] if hasattr(db, 'query') else 0
+    # Get recent tweets (handle both PostgreSQL and SQLite date formats)
+    try:
+        recent_result = await db.fetchone(
+            "SELECT COUNT(*) as count FROM sent_tweets WHERE sent_at > NOW() - INTERVAL '1 hour'"
+            if db.is_postgres else
+            "SELECT COUNT(*) as count FROM sent_tweets WHERE sent_at > datetime('now', '-1 hour')"
+        )
+        recent_tweets = recent_result['count'] if recent_result else 0
+    except:
+        recent_tweets = 0
     
     # Get last check time
-    last_check = db.query(
-        "SELECT MAX(created_at) as last FROM sent_tweets"
-    )[0]['last'] if hasattr(db, 'query') else None
+    try:
+        last_result = await db.fetchone("SELECT MAX(sent_at) as last FROM sent_tweets")
+        last_check = last_result['last'] if last_result else None
+    except:
+        last_check = None
+    
+    # Get user count
+    try:
+        users_result = await db.fetchall("SELECT * FROM monitored_users WHERE is_active = TRUE")
+        user_count = len(users_result)
+    except:
+        user_count = 0
     
     return {
         "status": "running" if scheduler and scheduler.running else "stopped",
@@ -311,7 +396,7 @@ async def debug_info():
         "interval": settings.CHECK_INTERVAL_SECONDS,
         "recent_tweets_last_hour": recent_tweets,
         "last_tweet_sent": last_check,
-        "users_monitored": len(db.get_all_users()) if hasattr(db, 'get_all_users') else 0,
+        "users_monitored": user_count,
         "config": {
             "use_telegram": settings.USE_TELEGRAM,
             "telegram_token_set": bool(settings.TELEGRAM_BOT_TOKEN),
