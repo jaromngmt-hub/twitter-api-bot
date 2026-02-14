@@ -14,6 +14,7 @@ class Tweet(BaseModel):
     likes: int = 0
     retweets: int = 0
     replies: int = 0
+    url: str = ""  # Tweet URL
     media_urls: List[str] = Field(default_factory=list)
     
     class Config:

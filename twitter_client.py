@@ -197,6 +197,9 @@ class TwitterClient:
                 if thumbnail:
                     media_urls.append(thumbnail)
         
+        # Build tweet URL (Twitter format)
+        tweet_url = f"https://twitter.com/i/web/status/{tweet_id}"
+        
         return Tweet(
             id=tweet_id,
             text=text,
@@ -204,5 +207,6 @@ class TwitterClient:
             likes=likes,
             retweets=retweets,
             replies=replies,
+            url=tweet_url,
             media_urls=media_urls
         )
